@@ -8,7 +8,6 @@ const ACTIVITY_FACTORS = {
 
 const MIN_CALORIES = { female: 1200, male: 1500, other: 1300 };
 const KCAL_PER_KG = 7700;
-const WEEKLY_LOSS_KG = 0.75;
 
 function round(n, d = 0) {
   const p = 10 ** d;
@@ -55,17 +54,16 @@ function suggestedPlan(profile) {
 
   if (toLose > 0.2) {
     const requestedWeekly = toLose / weeks;
-    weeklyLossCapKg = WEEKLY_LOSS_KG;
-    const deficit = (WEEKLY_LOSS_KG * KCAL_PER_KG) / 7;
+    const neededDeficit = (requestedWeekly * KCAL_PER_KG) / 7;
     const floor = MIN_CALORIES[sex] || MIN_CALORIES.other;
-    calorieTarget = Math.max(floor, round(tdee - deficit));
+    calorieTarget = Math.max(floor, round(tdee - neededDeficit));
     const actualDeficit = tdee - calorieTarget;
     const actualWeekly = actualDeficit > 0 ? round((actualDeficit * 7) / KCAL_PER_KG, 2) : 0;
-    const weeksToGoal = actualWeekly > 0 ? Math.ceil(toLose / actualWeekly) : null;
-    if (requestedWeekly > WEEKLY_LOSS_KG + 0.05) {
-      note = `The date implies faster than ${WEEKLY_LOSS_KG} kg per week. Calories are set for about ${actualWeekly} kg per week. Consider a later target date.`;
+    weeklyLossCapKg = actualWeekly;
+    if (round(tdee - neededDeficit) < floor) {
+      note = `The date implies a larger daily deficit than the ${floor} kcal floor allows. Calories are set at the floor (~${actualWeekly} kg per week). Consider a later target date.`;
     } else {
-      note = `Plan is about ${actualWeekly} kg per week. Estimated time to the goal is about ${weeksToGoal} weeks. Food labels and restaurant meals vary.`;
+      note = `Calories follow your goal and date: about ${actualWeekly} kg per week (~${round(actualDeficit)} kcal/day below TDEE). Food labels and restaurant meals vary.`;
     }
   } else if (toLose < -0.2) {
     calorieTarget = round(tdee + 250);

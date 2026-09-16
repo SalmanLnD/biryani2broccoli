@@ -80,7 +80,7 @@ export default function Setup() {
           {[
             "A few details so calorie and protein targets can be calculated for you.",
             "Used for BMI, BMR and TDEE estimates — not medical advice.",
-            "The plan aims for about 0.75 kg per week, as long as calories stay above the safety floor.",
+            "Weekly pace is calculated from your current weight, goal weight, and target date.",
             "These numbers are estimates. You can edit them later in Profile.",
           ][step]}
         </p>
