@@ -57,7 +57,7 @@ function suggestedPlan(profile) {
     weeklyLossCapKg = round(Math.min(0.75, Math.max(0.25, currentWeightKg * 0.0075)), 2);
     const safeWeekly = Math.min(requestedWeekly, weeklyLossCapKg);
     const rawDeficit = (safeWeekly * KCAL_PER_KG) / 7;
-    const cappedDeficit = Math.min(rawDeficit, tdee * 0.22, 650);
+    const cappedDeficit = Math.min(rawDeficit, tdee * 0.15, 650);
     const floor = MIN_CALORIES[sex] || MIN_CALORIES.other;
     calorieTarget = Math.max(floor, round(tdee - Math.max(200, cappedDeficit)));
     if (requestedWeekly > weeklyLossCapKg + 0.05) {
