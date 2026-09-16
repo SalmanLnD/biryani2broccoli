@@ -103,29 +103,35 @@ export function CalorieHero({ day }) {
   const remaining = day.remaining;
   const consumed = day.consumed.calories;
   const target = day.targets.calorieTarget;
-  const budget = day.calorieBudget || (target + (day.activeKcal || 0));
+  const over = remaining < 0;
   const stepCount = day.steps?.steps || 0;
+  const deficit = day.estimatedDeficit ?? ((day.tdee || target) - consumed + (day.activeKcal || 0));
+  const surplus = deficit < 0;
   return (
     <section className="hero">
       <div className="hero-top">
         <div className="ring-wrap">
-          <Ring value={consumed} max={budget} />
+          <Ring value={consumed} max={target} />
           <div className="ring-label">
-            <b>{formatNum(Math.max(0, remaining))}</b>
-            <span className="tiny">kcal remaining</span>
+            <b>{formatNum(Math.abs(remaining))}</b>
+            <span className="tiny">{over ? "kcal over max" : "left to eat"}</span>
           </div>
         </div>
         <div>
           <div className="kcal-center">
-            <span className="tiny">Calories</span>
-            <strong>{formatNum(consumed)} / {formatNum(budget)}</strong>
-            <p className="tiny">{day.percent}% of today's budget</p>
-            <p className="tiny">{formatNum(target)} food target{day.activeKcal ? ` + ${formatNum(day.activeKcal)} activity` : ""}</p>
+            <span className="tiny">Intake vs daily max</span>
+            <strong>{formatNum(consumed)} / {formatNum(target)}</strong>
+            <p className="tiny">{day.percent}% of the food maximum</p>
+            <p className="tiny">Burned calories increase the deficit. They do not raise this max.</p>
           </div>
           <div className="stats-row">
             <div className="stat"><b>{formatNum(consumed)}</b><span>Consumed</span></div>
             <div className="stat"><b>{formatNum(day.activeKcal)}</b><span>Burned</span></div>
             <div className="stat"><b>{formatNum(stepCount)}</b><span>Steps</span></div>
+            <div className="stat">
+              <b>{formatNum(Math.abs(deficit))}</b>
+              <span>{surplus ? "Est. surplus" : "Est. deficit"}</span>
+            </div>
           </div>
         </div>
       </div>

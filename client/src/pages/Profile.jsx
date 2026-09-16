@@ -73,7 +73,7 @@ export default function Profile() {
         <div><span className="tiny">BMI</span><b>{p.bmi}</b></div>
         <div><span className="tiny">BMR</span><b>{p.bmr}</b></div>
         <div><span className="tiny">TDEE</span><b>{p.tdee}</b></div>
-        <div><span className="tiny">Calories</span><b>{p.calorieTarget}</b></div>
+        <div><span className="tiny">Daily max</span><b>{p.calorieTarget}</b></div>
         <div><span className="tiny">Protein</span><b>{p.proteinTarget}g</b></div>
         <div><span className="tiny">Carbs</span><b>{p.carbTarget}g</b></div>
         <div><span className="tiny">Fat</span><b>{p.fatTarget}g</b></div>

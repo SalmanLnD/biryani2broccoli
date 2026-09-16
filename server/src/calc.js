@@ -179,7 +179,7 @@ function sessionStats(exercises) {
 
 function generateInsights({ consumed, targets, burned, meals }) {
   const insights = [];
-  const remaining = round((targets.calorieTarget || 0) - (consumed.calories || 0) + (burned || 0));
+  const remaining = round((targets.calorieTarget || 0) - (consumed.calories || 0));
   if ((consumed.protein || 0) < (targets.proteinTarget || 0) * 0.9) {
     insights.push("Protein is below today's target.");
   } else {
@@ -192,12 +192,14 @@ function generateInsights({ consumed, targets, burned, meals }) {
     insights.push(`Most calories came from ${label}.`);
   }
   if (remaining > 80) {
-    insights.push(`You have approximately ${remaining} kcal remaining.`);
-    insights.push("Dinner can prioritize protein and vegetables.");
+    insights.push(`About ${remaining} kcal left before today's food maximum.`);
   } else if (remaining < -80) {
-    insights.push("Today is above the calorie target. Tomorrow can stay closer to the estimated budget.");
+    insights.push("Intake is above today's food maximum.");
   } else {
-    insights.push("Calories are near the estimated daily target.");
+    insights.push("Calories are near today's food maximum.");
+  }
+  if ((burned || 0) > 50) {
+    insights.push(`Activity is about ${burned} kcal. That increases the estimated deficit; it does not raise the food maximum.`);
   }
   if ((consumed.fiber || 0) < (targets.fiberTarget || 0) * 0.7) {
     insights.push("Fiber is on the lower side — vegetables, dal, or fruit can help.");

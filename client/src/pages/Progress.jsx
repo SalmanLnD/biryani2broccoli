@@ -26,7 +26,7 @@ export default function Weekly() {
         <>
           <div className="kpi">
             <div><b>{formatNum(data.weekly.caloriesConsumed)}</b><span>Weekly kcal in</span></div>
-            <div><b>{formatNum(data.weekly.caloriesTarget)}</b><span>Weekly target</span></div>
+            <div><b>{formatNum(data.weekly.caloriesTarget)}</b><span>Weekly food max</span></div>
             <div><b>{formatNum(data.weekly.avgCalories)}</b><span>Avg daily kcal</span></div>
             <div><b>{formatNum(data.weekly.protein, 0)}g</b><span>Weekly protein</span></div>
             <div><b>{data.weekly.avgProtein}g</b><span>Avg daily protein</span></div>
@@ -34,9 +34,9 @@ export default function Weekly() {
             <div><b>{formatNum(data.weekly.fat, 0)}g</b><span>Weekly fat</span></div>
             <div><b>{formatNum(data.weekly.fiber, 0)}g</b><span>Weekly fiber</span></div>
           </div>
-          <p className="note" style={{ margin: "12px 0" }}>{data.weekly.daysWithinTarget} of 7 days within calorie target</p>
+          <p className="note" style={{ margin: "12px 0" }}>{data.weekly.daysWithinTarget} of 7 days at or under the calorie maximum</p>
           <div className="card">
-            <h3>Daily target vs consumed</h3>
+            <h3>Daily max vs consumed</h3>
             <div className="chart-box">
               <ResponsiveContainer>
                 <BarChart data={chart}>
@@ -230,13 +230,14 @@ export function DailySummary() {
       <header className="page-head"><div><div className="greet">{formatDate(date)}</div><h1>Daily summary</h1></div></header>
       <ProgressTabs />
       <div className="card">
-        <p>Calories: {formatNum(day.consumed.calories)} / {formatNum(day.targets.calorieTarget)}</p>
+        <p>Calories: {formatNum(day.consumed.calories)} / {formatNum(day.targets.calorieTarget)} max</p>
         <p>Protein: {formatNum(day.consumed.protein, 0)} / {day.targets.proteinTarget}g</p>
         <p>Carbs: {formatNum(day.consumed.carbs, 0)} / {day.targets.carbTarget}g</p>
         <p>Fat: {formatNum(day.consumed.fat, 0)} / {day.targets.fatTarget}g</p>
-        <p>Remaining: {formatNum(Math.max(0, day.remaining))} kcal</p>
-        <p>Steps: {formatNum(day.steps?.steps || 0)} · ~{formatNum(day.stepKcal)} kcal</p>
-        <p>Activity: {formatNum(day.activeKcal)} kcal</p>
+        <p>Left to eat: {formatNum(Math.max(0, day.remaining))} kcal</p>
+        <p>Steps: {formatNum(day.steps?.steps || 0)} · ~{formatNum(day.stepKcal)} kcal burned</p>
+        <p>Activity: {formatNum(day.activeKcal)} kcal burned</p>
+        <p>Estimated deficit: {formatNum(day.estimatedDeficit || 0)} kcal vs maintenance</p>
       </div>
       <div className="card">
         <h3>Observations</h3>

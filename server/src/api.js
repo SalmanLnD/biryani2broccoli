@@ -125,9 +125,10 @@ async function dayPayload(user, date) {
     sugarLimit: user.profile?.sugarLimit || 0,
     sodiumLimit: user.profile?.sodiumLimit || 2300,
   };
-  const budget = (targets.calorieTarget || 0) + activeKcal;
-  const net = round((consumed.calories || 0) - activeKcal);
-  const remaining = round(budget - (consumed.calories || 0));
+  const tdee = user.profile?.tdee || targets.calorieTarget || 0;
+  const remaining = round((targets.calorieTarget || 0) - (consumed.calories || 0));
+  const estimatedDeficit = round(tdee - (consumed.calories || 0) + activeKcal);
+  const net = round((consumed.calories || 0) - tdee - activeKcal);
   const insights = generateInsights({
     consumed,
     targets,
@@ -144,8 +145,10 @@ async function dayPayload(user, date) {
     activeKcal,
     netCalories: net,
     remaining,
-    calorieBudget: budget,
-    percent: budget ? round((consumed.calories / budget) * 100) : 0,
+    calorieBudget: targets.calorieTarget || 0,
+    tdee,
+    estimatedDeficit,
+    percent: targets.calorieTarget ? round((consumed.calories / targets.calorieTarget) * 100) : 0,
     workouts,
     steps: steps || { steps: 0, calories: 0, date },
     weight,

@@ -179,10 +179,10 @@ h3 { font-size: 0.95rem; }
 .ring-label b { font-size: 1.4rem; letter-spacing: -0.04em; line-height: 1; }
 .stats-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: 1fr 1fr;
   gap: 6px;
   width: 100%;
-  margin-top: 4px;
+  margin-top: 8px;
 }
 .stat {
   background: var(--bg-2);
@@ -631,6 +631,7 @@ h3 { font-size: 0.95rem; }
   .auth-card { width: min(480px, 100%); padding: 28px 22px; }
   .day-chip b { width: 40px; height: 40px; }
   .hero-top { gap: 16px; }
+  .stats-row { grid-template-columns: repeat(4, 1fr); }
 }
 
 @media (min-width: 980px) {

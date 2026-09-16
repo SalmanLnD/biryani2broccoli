@@ -52,7 +52,7 @@ export default function WorkoutHome() {
       const data = await api.setSteps(date, count);
       if (data.day) setDay(data.day);
       setSteps(data.steps?.steps ?? count);
-      setSaved(`Saved ${Number(data.steps?.steps || count).toLocaleString()} steps. About ${formatNum(data.steps?.calories || 0)} kcal added to remaining.`);
+      setSaved(`Saved ${Number(data.steps?.steps || count).toLocaleString()} steps. About ${formatNum(data.steps?.calories || 0)} kcal burned — that increases the deficit, not the food max.`);
     } catch (err) {
       setStepError(err.message || "Could not save steps.");
     } finally {
@@ -81,7 +81,7 @@ export default function WorkoutHome() {
 
       <form className="card" onSubmit={saveSteps}>
         <h3>Steps</h3>
-        <p className="tiny">Walking calories are added back to today's remaining target. Estimate only.</p>
+        <p className="tiny">Walking calories count as energy burned. They increase today's deficit and do not raise the food maximum. Estimate only.</p>
         <div className="qty">
           <button type="button" onClick={() => setSteps(Math.max(0, Number(steps) - 500))}>−</button>
           <input
