@@ -114,7 +114,7 @@ export function AddFood() {
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search idli, dosa, biryani…" />
       </div>
       <div className="chips">
-        {["all", "breakfast", "rice", "curry", "snacks", "fruits", "dairy", "beverages"].map((c) => (
+        {["all", "breakfast", "rice", "curry", "snacks", "restaurant", "fruits", "dairy", "beverages"].map((c) => (
           <button key={c} className={`chip ${category === c ? "on" : ""}`} onClick={() => setCategory(c)}>{c}</button>
         ))}
         <button className={`chip ${custom ? "on" : ""}`} onClick={() => { setCustom(true); setPicked(null); }}>Custom</button>
