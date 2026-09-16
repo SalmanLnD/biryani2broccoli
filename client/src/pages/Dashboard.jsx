@@ -17,7 +17,10 @@ export default function Dashboard() {
           <h1>{user?.name?.split(" ")[0]}</h1>
           <p className="tiny">{formatDate(date, { weekday: "long", day: "numeric", month: "long" })}</p>
         </div>
-        <button className="btn ghost" onClick={() => nav("/food/add")}>+ Add food</button>
+        <button className="btn compact ghost" onClick={() => nav("/food/add")}>
+          <span className="btn-short">+</span>
+          <span className="btn-full">+ Add food</span>
+        </button>
       </header>
       <DateStrip />
       {loading && !day && <div className="skeleton" style={{ height: 220, marginBottom: 16 }} />}

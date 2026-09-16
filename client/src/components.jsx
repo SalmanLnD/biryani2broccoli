@@ -114,7 +114,7 @@ export function CalorieHero({ day }) {
           </div>
         </div>
         <div>
-          <div className="kcal-center" style={{ textAlign: "left" }}>
+          <div className="kcal-center">
             <span className="tiny">Calories</span>
             <strong>{formatNum(consumed)} / {formatNum(target)}</strong>
             <p className="tiny">{day.percent}% of estimated target</p>

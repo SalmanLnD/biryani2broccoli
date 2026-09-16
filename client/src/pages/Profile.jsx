@@ -38,7 +38,7 @@ export default function Profile() {
           <div className="greet">Settings</div>
           <h1>Profile</h1>
         </div>
-        <button className="btn secondary" onClick={logout}>Sign out</button>
+        <button className="btn compact secondary" onClick={logout}>Sign out</button>
       </header>
       <form onSubmit={save}>
         <div className="field"><label>Name</label><input value={form.name} onChange={(e) => set("name", e.target.value)} /></div>

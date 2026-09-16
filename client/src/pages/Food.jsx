@@ -15,7 +15,10 @@ export default function FoodPage() {
           <div className="greet">Food diary</div>
           <h1>Track a meal</h1>
         </div>
-        <button className="btn" onClick={() => nav("/food/add")}>+ Add food</button>
+        <button className="btn compact" onClick={() => nav("/food/add")}>
+          <span className="btn-short">+</span>
+          <span className="btn-full">+ Add food</span>
+        </button>
       </header>
       {MEALS.map((m) => {
         const meal = day?.meals?.[m.slot];
@@ -99,7 +102,7 @@ export function AddFood() {
           <div className="greet">Add food</div>
           <h1>Log something</h1>
         </div>
-        <button className="btn secondary" onClick={() => nav(-1)}>Close</button>
+        <button className="btn compact secondary" onClick={() => nav(-1)}>Close</button>
       </header>
       <div className="chips">
         {MEALS.map((m) => (
@@ -117,15 +120,19 @@ export function AddFood() {
         <button className={`chip ${custom ? "on" : ""}`} onClick={() => { setCustom(true); setPicked(null); }}>Custom</button>
       </div>
 
-      {!picked && !custom && foods.map((f) => (
-        <button key={f._id} className="food-row" onClick={() => choose(f)}>
-          <div>
-            <b>{f.name}</b>
-            <span className="tiny">{f.category} · ~{f.nutritionPer100g.calories} kcal / 100g · est.</span>
-          </div>
-          <span className="tiny">Add</span>
-        </button>
-      ))}
+      {!picked && !custom && (
+        <div className="list-card">
+          {foods.map((f) => (
+            <button key={f._id} className="food-row" onClick={() => choose(f)}>
+              <div>
+                <b>{f.name}</b>
+                <span className="tiny">{f.category} · ~{f.nutritionPer100g.calories} kcal / 100g · est.</span>
+              </div>
+              <span className="tiny">Add</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {custom && (
         <div className="card">
@@ -172,9 +179,11 @@ export function AddFood() {
       )}
 
       {(picked || custom) && (
-        <button className="btn block lg" disabled={busy || (!picked && !form.name)} onClick={save}>
-          {busy ? "Adding…" : "Add to meal"}
-        </button>
+        <div className="sticky-cta">
+          <button className="btn block lg" disabled={busy || (!picked && !form.name)} onClick={save}>
+            {busy ? "Adding…" : "Add to meal"}
+          </button>
+        </div>
       )}
     </Shell>
   );
@@ -223,7 +232,7 @@ export function MealDetail() {
           <div className="greet">Meal</div>
           <h1>{meal.label}</h1>
         </div>
-        <button className="btn" onClick={() => nav(`/food/add?meal=${slot}`)}>+ Food</button>
+        <button className="btn compact" onClick={() => nav(`/food/add?meal=${slot}`)}>+ Food</button>
       </header>
       {meal.items.map((item) => (
         <div className="card" key={item._id}>

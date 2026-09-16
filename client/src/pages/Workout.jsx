@@ -48,9 +48,12 @@ export default function WorkoutHome() {
           <h1>Workout</h1>
         </div>
         {open ? (
-          <button className="btn" onClick={() => nav(`/workout/session/${open._id}`)}>Resume</button>
+          <button className="btn compact" onClick={() => nav(`/workout/session/${open._id}`)}>Resume</button>
         ) : (
-          <button className="btn" onClick={() => start("Gym session")}>Start workout</button>
+          <button className="btn compact" onClick={() => start("Gym session")}>
+            <span className="btn-short">Start</span>
+            <span className="btn-full">Start workout</span>
+          </button>
         )}
       </header>
 
@@ -85,15 +88,17 @@ export default function WorkoutHome() {
           <button key={m} className={`chip ${muscle === m ? "on" : ""}`} onClick={() => setMuscle(m)}>{m}</button>
         ))}
       </div>
-      {exercises.map((ex) => (
-        <button key={ex._id} className="ex-row" onClick={() => nav(`/workout/exercise/${ex._id}`)}>
-          <div>
-            <b>{ex.name}</b>
-            <span className="tiny">{ex.muscleGroup} · {ex.difficulty} · {ex.kind}</span>
-          </div>
-          <span className="tiny">Open</span>
-        </button>
-      ))}
+      <div className="list-card">
+        {exercises.map((ex) => (
+          <button key={ex._id} className="ex-row" onClick={() => nav(`/workout/exercise/${ex._id}`)}>
+            <div>
+              <b>{ex.name}</b>
+              <span className="tiny">{ex.muscleGroup} · {ex.difficulty} · {ex.kind}</span>
+            </div>
+            <span className="tiny">Open</span>
+          </button>
+        ))}
+      </div>
     </Shell>
   );
 }
@@ -197,7 +202,7 @@ export function WorkoutSession() {
           <div className="greet">In progress</div>
           <h1>Session</h1>
         </div>
-        <button className="btn" onClick={finish}>Finish</button>
+        <button className="btn compact" onClick={finish}>Finish</button>
       </header>
       <div className="field"><label>Workout name</label><input value={title} onChange={(e) => setTitle(e.target.value)} /></div>
       {workout.exercises.map((block, ei) => (
