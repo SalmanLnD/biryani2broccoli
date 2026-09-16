@@ -1,0 +1,19 @@
+{
+  "name": "biryani2broccoli",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Diet and fitness tracker for weight loss, nutrition, and gym workouts",
+  "scripts": {
+    "install:all": "npm install --prefix server && npm install --prefix client",
+    "dev": "concurrently -n server,client -c teal,green \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "build": "npm install --prefix client && npm run build --prefix client && npm install --prefix server && node scripts/copy-client.js",
+    "start": "npm start --prefix server",
+    "seed": "npm run seed --prefix server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
