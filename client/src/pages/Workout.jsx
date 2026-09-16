@@ -6,14 +6,22 @@ import { Icon, Shell } from "../components";
 import { ExercisePoses } from "../ExercisePoses";
 import { EQUIPMENT, formatNum, MUSCLES } from "../lib";
 
+function walkKcal(steps, weightKg) {
+  const w = Number(weightKg) || 70;
+  return Math.round(Math.max(0, Number(steps) || 0) * 0.04 * (w / 70));
+}
+
 export default function WorkoutHome() {
-  const { date, day } = useApp();
+  const { date, day, user, setDay } = useApp();
   const nav = useNavigate();
   const [workouts, setWorkouts] = useState([]);
   const [q, setQ] = useState("");
   const [muscle, setMuscle] = useState("all");
   const [exercises, setExercises] = useState([]);
   const [steps, setSteps] = useState(day?.steps?.steps || 0);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState("");
+  const [stepError, setStepError] = useState("");
 
   useEffect(() => {
     api.workouts(date).then((d) => setWorkouts(d.workouts));
@@ -34,8 +42,22 @@ export default function WorkoutHome() {
     nav(`/workout/session/${data.workout._id}`);
   }
 
-  async function saveSteps() {
-    await api.setSteps(date, Number(steps) || 0);
+  async function saveSteps(e) {
+    e?.preventDefault();
+    setBusy(true);
+    setSaved("");
+    setStepError("");
+    try {
+      const count = Math.max(0, Math.round(Number(steps) || 0));
+      const data = await api.setSteps(date, count);
+      if (data.day) setDay(data.day);
+      setSteps(data.steps?.steps ?? count);
+      setSaved(`Saved ${Number(data.steps?.steps || count).toLocaleString()} steps. About ${formatNum(data.steps?.calories || 0)} kcal added to remaining.`);
+    } catch (err) {
+      setStepError(err.message || "Could not save steps.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   const open = workouts.find((w) => w.status === "in_progress");
@@ -57,16 +79,27 @@ export default function WorkoutHome() {
         )}
       </header>
 
-      <div className="card">
+      <form className="card" onSubmit={saveSteps}>
         <h3>Steps</h3>
-        <p className="tiny">Used to estimate walking calories. Optional.</p>
+        <p className="tiny">Walking calories are added back to today's remaining target. Estimate only.</p>
         <div className="qty">
           <button type="button" onClick={() => setSteps(Math.max(0, Number(steps) - 500))}>−</button>
-          <input type="number" value={steps} onChange={(e) => setSteps(e.target.value)} />
+          <input
+            type="number"
+            inputMode="numeric"
+            min="0"
+            max="100000"
+            value={steps}
+            onChange={(e) => setSteps(e.target.value)}
+            aria-label="Today's steps"
+          />
           <button type="button" onClick={() => setSteps(Number(steps) + 500)}>+</button>
         </div>
-        <button className="btn secondary" onClick={saveSteps}>Save steps</button>
-      </div>
+        <p className="tiny">~{formatNum(walkKcal(steps, user?.profile?.currentWeightKg))} kcal from these steps</p>
+        {stepError && <p className="error">{stepError}</p>}
+        {saved && <p className="note">{saved}</p>}
+        <button className="btn block" type="submit" disabled={busy}>{busy ? "Saving…" : "Save steps"}</button>
+      </form>
 
       {workouts.filter((w) => w.status === "completed").map((w) => (
         <button key={w._id} className="food-row" onClick={() => nav(`/workout/summary/${w._id}`)}>

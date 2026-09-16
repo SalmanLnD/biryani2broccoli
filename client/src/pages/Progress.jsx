@@ -234,7 +234,9 @@ export function DailySummary() {
         <p>Protein: {formatNum(day.consumed.protein, 0)} / {day.targets.proteinTarget}g</p>
         <p>Carbs: {formatNum(day.consumed.carbs, 0)} / {day.targets.carbTarget}g</p>
         <p>Fat: {formatNum(day.consumed.fat, 0)} / {day.targets.fatTarget}g</p>
-        <p>Exercise: {formatNum(day.activeKcal)} kcal</p>
+        <p>Remaining: {formatNum(Math.max(0, day.remaining))} kcal</p>
+        <p>Steps: {formatNum(day.steps?.steps || 0)} · ~{formatNum(day.stepKcal)} kcal</p>
+        <p>Activity: {formatNum(day.activeKcal)} kcal</p>
       </div>
       <div className="card">
         <h3>Observations</h3>

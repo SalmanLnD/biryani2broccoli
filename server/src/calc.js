@@ -179,7 +179,7 @@ function sessionStats(exercises) {
 
 function generateInsights({ consumed, targets, burned, meals }) {
   const insights = [];
-  const remaining = round((targets.calorieTarget || 0) - (consumed.calories || 0) + (burned || 0) * 0.3);
+  const remaining = round((targets.calorieTarget || 0) - (consumed.calories || 0) + (burned || 0));
   if ((consumed.protein || 0) < (targets.proteinTarget || 0) * 0.9) {
     insights.push("Protein is below today's target.");
   } else {

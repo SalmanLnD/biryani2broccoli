@@ -322,6 +322,7 @@ h3 { font-size: 0.95rem; }
   padding: 10px 12px;
   border-radius: 12px;
   font-size: 0.8rem;
+  margin: 8px 0 12px;
 }
 
 .search { position: relative; margin-bottom: 10px; }

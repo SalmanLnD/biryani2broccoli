@@ -44,7 +44,9 @@ function publicUser(user) {
 }
 
 function stepCalories(steps, weightKg) {
-  return round(((Number(steps) || 0) / 1000) * 0.5 * (weightKg || 70) * 0.04 * 100);
+  const n = Math.max(0, Number(steps) || 0);
+  const w = Number(weightKg) || 70;
+  return round(n * 0.04 * (w / 70));
 }
 
 async function ensureMeals(userId, date) {
@@ -123,8 +125,9 @@ async function dayPayload(user, date) {
     sugarLimit: user.profile?.sugarLimit || 0,
     sodiumLimit: user.profile?.sodiumLimit || 2300,
   };
+  const budget = (targets.calorieTarget || 0) + activeKcal;
   const net = round((consumed.calories || 0) - activeKcal);
-  const remaining = round((targets.calorieTarget || 0) - (consumed.calories || 0));
+  const remaining = round(budget - (consumed.calories || 0));
   const insights = generateInsights({
     consumed,
     targets,
@@ -141,7 +144,8 @@ async function dayPayload(user, date) {
     activeKcal,
     netCalories: net,
     remaining,
-    percent: targets.calorieTarget ? round((consumed.calories / targets.calorieTarget) * 100) : 0,
+    calorieBudget: budget,
+    percent: budget ? round((consumed.calories / budget) * 100) : 0,
     workouts,
     steps: steps || { steps: 0, calories: 0, date },
     weight,
@@ -549,14 +553,23 @@ function createRouter() {
   });
 
   r.put("/steps/:date", auth, async (req, res) => {
-    const steps = Number(req.body.steps) || 0;
-    const calories = round((steps / 20) * ((req.user.profile?.currentWeightKg || 70) / 70));
-    const log = await StepLog.findOneAndUpdate(
-      { user: req.user._id, date: req.params.date },
-      { steps, calories },
-      { upsert: true, new: true }
-    );
-    res.json({ steps: log });
+    try {
+      const date = String(req.params.date || "").slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return res.status(400).json({ error: "Choose a valid day." });
+      }
+      const steps = Math.max(0, Math.min(100000, Math.round(Number(req.body.steps) || 0)));
+      const calories = stepCalories(steps, req.user.profile?.currentWeightKg);
+      const log = await StepLog.findOneAndUpdate(
+        { user: req.user._id, date },
+        { $set: { user: req.user._id, date, steps, calories } },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+      const day = await dayPayload(req.user, date);
+      res.json({ steps: log, day });
+    } catch (err) {
+      res.status(400).json({ error: err.message || "Could not save steps." });
+    }
   });
 
   r.get("/weight", auth, async (req, res) => {
