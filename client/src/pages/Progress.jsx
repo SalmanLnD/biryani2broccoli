@@ -81,7 +81,7 @@ export function Journey() {
             <div><b>{data.remaining} kg</b><span>Remaining</span></div>
             <div><b>{data.progress}%</b><span>Progress</span></div>
           </div>
-          <p className="tiny" style={{ margin: "8px 0 12px" }}>Target date {data.targetDate}. A sustainable pace is about 0.25–0.75 kg per week.</p>
+          <p className="tiny" style={{ margin: "8px 0 12px" }}>Target date {data.targetDate}. The plan aims for about 0.75 kg per week.</p>
           <div className="card">
             <h3>Weight vs date</h3>
             <div className="chart-box">
