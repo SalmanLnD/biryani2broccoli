@@ -88,6 +88,7 @@ const FOODS = [
   food("Rasam", "curry", n(28, 1.1, 4.2, 0.7, 0.8, 1.4, 320), { bowl: 200, cup: 180, serving: 200 }, { defaultUnit: "bowl", defaultQuantity: 1 }),
   food("Dal", "curry", n(108, 6.8, 14.0, 2.6, 4.2, 1.2, 310), { bowl: 180, cup: 160, serving: 180 }, { defaultUnit: "bowl", defaultQuantity: 1 }),
   food("Dal Tadka", "curry", n(126, 7.0, 13.5, 4.4, 4.0, 1.3, 340), { bowl: 180, serving: 180 }, { defaultUnit: "bowl", defaultQuantity: 1 }),
+  food("Rajma", "curry", n(132, 7.4, 16.8, 4.2, 5.6, 2.4, 360), { bowl: 180, cup: 160, serving: 180 }, { defaultUnit: "bowl", defaultQuantity: 1, cuisine: "indian" }),
   food("Vegetable Kurma", "curry", n(98, 2.8, 9.4, 5.6, 2.6, 3.2, 360), { bowl: 180, serving: 180 }, { defaultUnit: "bowl", defaultQuantity: 1 }),
   food("Avial", "curry", n(92, 2.6, 8.8, 5.2, 2.8, 3.0, 280), { bowl: 160, serving: 160 }, { defaultUnit: "bowl", defaultQuantity: 1 }),
   food("Kootu", "curry", n(86, 3.8, 10.0, 3.2, 3.2, 2.4, 300), { bowl: 170, serving: 170 }, { defaultUnit: "bowl", defaultQuantity: 1 }),
