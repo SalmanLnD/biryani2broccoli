@@ -102,6 +102,15 @@ h3 { font-size: 0.95rem; }
 .greet { font-size: 0.75rem; color: var(--muted); font-weight: 600; }
 .page-head h1 { margin-top: 2px; word-break: break-word; }
 .page-head .btn { flex-shrink: 0; }
+.head-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.csv-preview { max-height: 280px; overflow: auto; margin: 10px 0 12px; }
+.csv-paste {
+  min-height: 180px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  white-space: pre;
+  overflow-x: auto;
+}
 
 .date-strip {
   display: flex;

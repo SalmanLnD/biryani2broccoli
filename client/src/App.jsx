@@ -4,6 +4,7 @@ import Setup, { Login } from "./pages/Setup";
 import Dashboard from "./pages/Dashboard";
 import FoodPage, { AddFood, MealDetail } from "./pages/Food";
 import WorkoutHome, { ExerciseDetail, WorkoutSession, WorkoutSummary } from "./pages/Workout";
+import WorkoutUpload from "./pages/WorkoutUpload";
 import Weekly, { DailySummary, Journey, Nutrients, Timeline, WeeklyWorkouts } from "./pages/Progress";
 import Profile from "./pages/Profile";
 
@@ -29,6 +30,7 @@ export default function App() {
       <Route path="/food/add" element={<Guard><AddFood /></Guard>} />
       <Route path="/meals/:slot" element={<Guard><MealDetail /></Guard>} />
       <Route path="/workout" element={<Guard><WorkoutHome /></Guard>} />
+      <Route path="/workout/upload" element={<Guard><WorkoutUpload /></Guard>} />
       <Route path="/workout/exercise/:id" element={<Guard><ExerciseDetail /></Guard>} />
       <Route path="/workout/session/:id" element={<Guard><WorkoutSession /></Guard>} />
       <Route path="/workout/summary/:id" element={<Guard><WorkoutSummary /></Guard>} />

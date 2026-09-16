@@ -49,6 +49,77 @@ function stepCalories(steps, weightKg) {
   return round(n * 0.04 * (w / 70));
 }
 
+function compactName(s) {
+  return String(s || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function matchExercise(name, catalog) {
+  const raw = String(name || "").trim();
+  if (!raw) return null;
+  const lower = raw.toLowerCase();
+  const compact = compactName(raw);
+  return (
+    catalog.find((e) => e.name.toLowerCase() === lower) ||
+    catalog.find((e) => compactName(e.name) === compact || e.slug === compact) ||
+    catalog.find((e) => e.name.toLowerCase().includes(lower) || lower.includes(e.name.toLowerCase()))
+  );
+}
+
+async function applyWorkoutStats(workout, user, { complete = false, durationMin } = {}) {
+  const stats = sessionStats(workout.exercises);
+  let kcal = 0;
+  const weightKg = user.profile?.currentWeightKg || 70;
+  for (const block of workout.exercises) {
+    const catalog = block.exercise ? await Exercise.findById(block.exercise) : null;
+    if (block.kind === "cardio") {
+      for (const s of block.sets) {
+        s.calories = estimateExerciseKcal({
+          met: catalog?.met,
+          durationMin: s.durationMin,
+          weightKg,
+          caloriesOverride: s.calories,
+        });
+        kcal += s.calories || 0;
+      }
+    } else {
+      const minutes = Math.max(4, (block.sets?.length || 0) * 3);
+      kcal += estimateExerciseKcal({ met: catalog?.met || 5, durationMin: minutes, weightKg }) / Math.max(1, workout.exercises.length);
+    }
+  }
+  workout.calories = round(kcal);
+  if (complete) {
+    workout.status = "completed";
+    workout.endedAt = workout.endedAt || new Date();
+    if (durationMin) workout.durationMin = durationMin;
+    else if (workout.startedAt) {
+      workout.durationMin = Math.max(1, Math.round((workout.endedAt - workout.startedAt) / 60000));
+    }
+    const previous = await Workout.find({
+      user: user._id,
+      status: "completed",
+      _id: { $ne: workout._id },
+    }).sort({ date: -1 });
+    const prs = [];
+    for (const block of workout.exercises) {
+      const maxW = Math.max(0, ...(block.sets || []).map((s) => Number(s.weight) || 0));
+      const pastMax = Math.max(
+        0,
+        ...previous.flatMap((w) =>
+          w.exercises
+            .filter((e) => block.exercise && String(e.exercise) === String(block.exercise))
+            .flatMap((e) => e.sets.map((s) => Number(s.weight) || 0))
+        )
+      );
+      if (maxW > 0 && maxW > pastMax) prs.push(`Heavier ${block.name}: ${maxW}${block.sets[0]?.unit || "kg"}`);
+    }
+    workout.personalRecords = prs;
+  }
+  return stats;
+}
+
 async function ensureMeals(userId, date) {
   const existing = await Meal.find({ user: userId, date });
   const have = new Set(existing.map((m) => m.slot));
@@ -478,6 +549,111 @@ function createRouter() {
     res.json({ workout });
   });
 
+  r.post("/workouts/bulk", auth, async (req, res) => {
+    const rows = Array.isArray(req.body.rows) ? req.body.rows : [];
+    if (!rows.length) return res.status(400).json({ error: "Add at least one exercise row." });
+    if (rows.length > 200) return res.status(400).json({ error: "Upload up to 200 rows at a time." });
+
+    const catalog = await Exercise.find();
+    const groups = new Map();
+    const errors = [];
+
+    rows.forEach((raw, index) => {
+      const line = index + 2;
+      const exerciseName = String(raw.exercise || raw.name || "").trim();
+      if (!exerciseName) {
+        errors.push({ line, error: "Exercise name is required." });
+        return;
+      }
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(String(raw.date || ""))
+        ? String(raw.date)
+        : req.body.date || localDateKey();
+      const title = String(raw.workout || raw.title || "Gym session").trim() || "Gym session";
+      const catalogEx = matchExercise(exerciseName, catalog);
+      const modeRaw = String(raw.mode || raw.kind || catalogEx?.kind || "strength").toLowerCase();
+      const kind = modeRaw.includes("cardio") ? "cardio" : "strength";
+      const equipment = String(raw.equipment || catalogEx?.equipment?.[0] || (kind === "cardio" ? "machine" : "barbell"));
+      const unit = String(raw.unit || "kg").toLowerCase() === "lb" ? "lb" : "kg";
+      const setCount = Math.max(1, Math.min(20, Math.round(Number(raw.sets) || (kind === "cardio" ? 1 : 3))));
+      let sets;
+      if (kind === "cardio") {
+        const one = {
+          durationMin: Number(raw.duration_min || raw.duration) || 20,
+          distanceKm: Number(raw.distance_km || raw.distance) || 0,
+          speedKmh: Number(raw.speed_kmh || raw.speed) || 0,
+          incline: Number(raw.incline) || 0,
+        };
+        sets = Array.from({ length: setCount }, () => ({ ...one }));
+      } else {
+        const one = {
+          reps: Math.max(1, Math.round(Number(raw.reps) || 10)),
+          weight: Math.max(0, Number(raw.weight) || 0),
+          unit,
+        };
+        sets = Array.from({ length: setCount }, () => ({ ...one }));
+      }
+      const key = `${date}||${title}`;
+      if (!groups.has(key)) groups.set(key, { date, title, notes: String(raw.notes || ""), exercises: [] });
+      const group = groups.get(key);
+      if (raw.notes) group.notes = [group.notes, String(raw.notes)].filter(Boolean).join(" ");
+      const blockName = catalogEx?.name || exerciseName;
+      const existing = group.exercises.find((e) => e.name.toLowerCase() === blockName.toLowerCase() && e.kind === kind);
+      const block = {
+        exercise: catalogEx?._id || null,
+        name: blockName,
+        muscleGroup: catalogEx?.muscleGroup || "other",
+        equipmentUsed: equipment,
+        kind,
+        sets,
+        matched: Boolean(catalogEx),
+      };
+      if (existing) existing.sets.push(...sets);
+      else group.exercises.push(block);
+    });
+
+    if (!groups.size) {
+      return res.status(400).json({ error: "No valid rows to import.", errors });
+    }
+
+    const created = [];
+    for (const group of groups.values()) {
+      let durationMin = 0;
+      for (const block of group.exercises) {
+        if (block.kind === "cardio") durationMin += block.sets.reduce((s, x) => s + (Number(x.durationMin) || 0), 0);
+        else durationMin += (block.sets.length || 0) * 3;
+      }
+      durationMin = Math.max(1, round(durationMin));
+      const startedAt = new Date(`${group.date}T08:00:00`);
+      const endedAt = new Date(startedAt.getTime() + durationMin * 60000);
+      const workout = new Workout({
+        user: req.user._id,
+        date: group.date,
+        title: group.title,
+        notes: group.notes,
+        startedAt,
+        endedAt,
+        durationMin,
+        status: "in_progress",
+        exercises: group.exercises.map(({ matched, ...block }) => block),
+      });
+      const stats = await applyWorkoutStats(workout, req.user, { complete: true, durationMin });
+      await workout.save();
+      created.push({
+        id: workout._id,
+        title: workout.title,
+        date: workout.date,
+        exercises: workout.exercises.length,
+        calories: workout.calories,
+        durationMin: workout.durationMin,
+        unmatched: group.exercises.filter((e) => !e.matched).map((e) => e.name),
+        stats,
+      });
+    }
+
+    const day = await dayPayload(req.user, req.body.date || localDateKey());
+    res.json({ workouts: created, errors, imported: created.length, day });
+  });
+
   r.post("/workouts/:id/exercises", auth, async (req, res) => {
     const workout = await Workout.findOne({ _id: req.params.id, user: req.user._id });
     if (!workout) return res.status(404).json({ error: "Workout not found." });
@@ -502,50 +678,11 @@ function createRouter() {
     if (req.body.exercises) workout.exercises = req.body.exercises;
     if (req.body.notes !== undefined) workout.notes = req.body.notes;
 
-    const stats = sessionStats(workout.exercises);
-    let kcal = 0;
-    const weightKg = req.user.profile?.currentWeightKg || 70;
-    for (const block of workout.exercises) {
-      const catalog = await Exercise.findById(block.exercise);
-      if (block.kind === "cardio") {
-        for (const s of block.sets) {
-          s.calories = estimateExerciseKcal({
-            met: catalog?.met,
-            durationMin: s.durationMin,
-            weightKg,
-            caloriesOverride: s.calories,
-          });
-          kcal += s.calories || 0;
-        }
-      } else {
-        const minutes = Math.max(4, (block.sets?.length || 0) * 3);
-        kcal += estimateExerciseKcal({ met: catalog?.met || 5, durationMin: minutes, weightKg }) / Math.max(1, workout.exercises.length);
-      }
-    }
-    workout.calories = round(kcal);
-    if (req.body.status === "completed") {
-      workout.status = "completed";
-      workout.endedAt = new Date();
-      workout.durationMin = req.body.durationMin || Math.max(1, Math.round((workout.endedAt - workout.startedAt) / 60000));
-      const previous = await Workout.find({
-        user: req.user._id,
-        status: "completed",
-        _id: { $ne: workout._id },
-      }).sort({ date: -1 });
-      const prs = [];
-      for (const block of workout.exercises) {
-        const maxW = Math.max(0, ...block.sets.map((s) => Number(s.weight) || 0));
-        const pastMax = Math.max(
-          0,
-          ...previous.flatMap((w) =>
-            w.exercises.filter((e) => String(e.exercise) === String(block.exercise)).flatMap((e) => e.sets.map((s) => Number(s.weight) || 0))
-          )
-        );
-        if (maxW > 0 && maxW > pastMax) prs.push(`Heavier ${block.name}: ${maxW}${block.sets[0]?.unit || "kg"}`);
-      }
-      workout.personalRecords = prs;
-      workout._stats = stats;
-    }
+    const stats = await applyWorkoutStats(workout, req.user, {
+      complete: req.body.status === "completed",
+      durationMin: req.body.durationMin,
+    });
+    if (req.body.status === "completed") workout._stats = stats;
     await workout.save();
     res.json({ workout, stats });
   });

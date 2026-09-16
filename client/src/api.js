@@ -40,6 +40,7 @@ export const api = {
   createWorkout: (payload) => request("/workouts", { method: "POST", body: JSON.stringify(payload) }),
   addExercise: (id, payload) => request(`/workouts/${id}/exercises`, { method: "POST", body: JSON.stringify(payload) }),
   saveWorkout: (id, payload) => request(`/workouts/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  bulkWorkouts: (payload) => request("/workouts/bulk", { method: "POST", body: JSON.stringify(payload) }),
   deleteWorkout: (id) => request(`/workouts/${id}`, { method: "DELETE" }),
   setSteps: (date, steps) => request(`/steps/${date}`, { method: "PUT", body: JSON.stringify({ steps }) }),
   weight: () => request("/weight"),

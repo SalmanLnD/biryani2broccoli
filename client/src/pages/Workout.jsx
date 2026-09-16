@@ -70,12 +70,18 @@ export default function WorkoutHome() {
           <h1>Workout</h1>
         </div>
         {open ? (
-          <button className="btn compact" onClick={() => nav(`/workout/session/${open._id}`)}>Resume</button>
+          <div className="head-actions">
+            <button className="btn compact secondary" type="button" onClick={() => nav("/workout/upload")}>Upload</button>
+            <button className="btn compact" onClick={() => nav(`/workout/session/${open._id}`)}>Resume</button>
+          </div>
         ) : (
-          <button className="btn compact" onClick={() => start("Gym session")}>
-            <span className="btn-short">Start</span>
-            <span className="btn-full">Start workout</span>
-          </button>
+          <div className="head-actions">
+            <button className="btn compact secondary" type="button" onClick={() => nav("/workout/upload")}>Upload</button>
+            <button className="btn compact" onClick={() => start("Gym session")}>
+              <span className="btn-short">Start</span>
+              <span className="btn-full">Start workout</span>
+            </button>
+          </div>
         )}
       </header>
 
