@@ -532,7 +532,7 @@ h3 { font-size: 0.95rem; }
 
 .set-row {
   display: grid;
-  grid-template-columns: 28px 1fr 1fr 52px;
+  grid-template-columns: 28px 1fr 1fr 52px 36px;
   gap: 6px;
   align-items: center;
   margin-bottom: 8px;
@@ -543,6 +543,26 @@ h3 { font-size: 0.95rem; }
   border-radius: 10px;
   padding: 0 6px;
   width: 100%;
+}
+.set-del {
+  height: 36px;
+  width: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--mint);
+  color: var(--teal-deep);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.session-actions {
+  position: sticky;
+  bottom: calc(var(--nav-safe) + 8px);
+  z-index: 20;
+  display: flex;
+  gap: 8px;
+  padding: 10px 0 4px;
+  background: linear-gradient(to top, var(--bg) 70%, transparent);
 }
 .card {
   background: white;
@@ -659,6 +679,11 @@ h3 { font-size: 0.95rem; }
   }
   .sidebar .brand small { color: #9cb8b1; }
   .bottom-nav { display: none; }
+  .session-actions {
+    position: static;
+    background: none;
+    padding: 12px 0 0;
+  }
   .app-main {
     max-width: 880px;
     padding: 28px 32px 48px;

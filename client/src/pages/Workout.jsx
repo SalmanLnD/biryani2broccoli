@@ -197,6 +197,9 @@ export function WorkoutSession() {
   const nav = useNavigate();
   const [workout, setWorkout] = useState(null);
   const [title, setTitle] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState("");
+  const [saveError, setSaveError] = useState("");
 
   async function load() {
     const all = await api.workouts();
@@ -217,19 +220,45 @@ export function WorkoutSession() {
     next.exercises[ei].sets.push(kind === "cardio" ? { durationMin: 10, calories: 0 } : { reps: 10, weight: 20, unit: "kg" });
     setWorkout(next);
   }
+  function removeSet(ei, si) {
+    const next = structuredClone(workout);
+    if (next.exercises[ei].sets.length <= 1) return;
+    next.exercises[ei].sets.splice(si, 1);
+    setWorkout(next);
+  }
+  function removeExercise(ei) {
+    const next = structuredClone(workout);
+    next.exercises.splice(ei, 1);
+    setWorkout(next);
+  }
   async function persist(extra = {}) {
-    const data = await api.saveWorkout(id, {
-      title,
-      exercises: workout.exercises,
-      notes: workout.notes,
-      ...extra,
-    });
-    setWorkout(data.workout);
-    return data;
+    setSaveError("");
+    setSaved("");
+    setBusy(true);
+    try {
+      const data = await api.saveWorkout(id, {
+        title,
+        exercises: workout.exercises,
+        notes: workout.notes,
+        ...extra,
+      });
+      setWorkout(data.workout);
+      if (!extra.status) setSaved("Session saved.");
+      return data;
+    } catch (err) {
+      setSaveError(err.message || "Could not save the session.");
+      throw err;
+    } finally {
+      setBusy(false);
+    }
   }
   async function finish() {
-    const data = await persist({ status: "completed" });
-    nav(`/workout/summary/${data.workout._id}`);
+    try {
+      const data = await persist({ status: "completed" });
+      nav(`/workout/summary/${data.workout._id}`);
+    } catch {
+      /* error shown on the session */
+    }
   }
 
   if (!workout) return <Shell><p>Loading session…</p></Shell>;
@@ -241,7 +270,7 @@ export function WorkoutSession() {
           <div className="greet">In progress</div>
           <h1>Session</h1>
         </div>
-        <button className="btn compact" onClick={finish}>Finish</button>
+        <button className="btn compact" type="button" disabled={busy} onClick={finish}>Finish</button>
       </header>
       <div className="field"><label>Workout name</label><input value={title} onChange={(e) => setTitle(e.target.value)} /></div>
       {workout.exercises.map((block, ei) => (
@@ -251,6 +280,7 @@ export function WorkoutSession() {
               <h3>{block.name}</h3>
               <p className="tiny">{block.muscleGroup}</p>
             </div>
+            <button className="btn ghost compact" type="button" onClick={() => removeExercise(ei)}>Remove</button>
           </div>
           {block.kind !== "cardio" && (
             <div className="field"><label>Equipment</label>
@@ -270,6 +300,9 @@ export function WorkoutSession() {
                 <div className="field"><label>Distance km</label><input type="number" step="0.1" value={s.distanceKm || ""} onChange={(e) => updateSet(ei, si, "distanceKm", Number(e.target.value))} /></div>
                 <div className="field"><label>Speed km/h</label><input type="number" step="0.1" value={s.speedKmh || ""} onChange={(e) => updateSet(ei, si, "speedKmh", Number(e.target.value))} /></div>
                 <div className="field"><label>Incline</label><input type="number" step="0.5" value={s.incline || ""} onChange={(e) => updateSet(ei, si, "incline", Number(e.target.value))} /></div>
+                {block.sets.length > 1 && (
+                  <button className="btn ghost" type="button" onClick={() => removeSet(ei, si)}>Remove set</button>
+                )}
               </div>
             ))
             : block.sets.map((s, si) => (
@@ -285,14 +318,19 @@ export function WorkoutSession() {
                     <option value="lb">lb</option>
                   </select>
                 )}
+                {block.sets.length > 1 ? (
+                  <button className="set-del" type="button" aria-label={`Remove set ${si + 1}`} onClick={() => removeSet(ei, si)}>×</button>
+                ) : <span />}
               </div>
             ))}
-          <button className="btn ghost" onClick={() => addSet(ei)}>+ Set</button>
+          <button className="btn ghost" type="button" onClick={() => addSet(ei)}>+ Set</button>
         </div>
       ))}
-      <div style={{ display: "flex", gap: 8 }}>
-        <button className="btn secondary" onClick={() => persist()}>Save</button>
-        <button className="btn ghost" onClick={() => nav("/workout")}>Add exercise</button>
+      {saveError && <p className="error">{saveError}</p>}
+      {saved && <p className="note">{saved}</p>}
+      <div className="session-actions">
+        <button className="btn" type="button" disabled={busy} onClick={() => persist().catch(() => {})}>{busy ? "Saving…" : "Save"}</button>
+        <button className="btn ghost" type="button" onClick={() => nav("/workout")}>Add exercise</button>
       </div>
     </Shell>
   );
