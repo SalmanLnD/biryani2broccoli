@@ -133,6 +133,7 @@ export default function Setup() {
               <div><span className="tiny">BMI</span><b>{plan.bmi}</b></div>
               <div><span className="tiny">BMR</span><b>{plan.bmr} kcal</b></div>
               <div><span className="tiny">TDEE</span><b>{plan.tdee} kcal</b></div>
+              <div><span className="tiny">Activity</span><b>{plan.activityLabel}</b></div>
               <div><span className="tiny">Daily food max</span><b>{plan.calorieTarget} kcal</b></div>
               <div><span className="tiny">Protein</span><b>{plan.proteinTarget} g</b></div>
               <div><span className="tiny">Carbs</span><b>{plan.carbTarget} g</b></div>

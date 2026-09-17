@@ -22,6 +22,10 @@ const {
   startOfWeek,
   weekDates,
   round,
+  energyBalance,
+  summarizeWorkouts,
+  goalTimeline,
+  weekEnergy,
 } = require("./calc");
 
 const MEAL_SLOTS = ["breakfast", "morning_snack", "lunch", "evening_snack", "dinner", "other"];
@@ -184,9 +188,10 @@ async function dayPayload(user, date) {
     };
   }
   const consumed = roundNutrition(sumNutrition(meals.flatMap((m) => m.items)));
-  const exerciseKcal = workouts.reduce((s, w) => s + (w.calories || 0), 0);
+  const workout = summarizeWorkouts(workouts);
+  const exerciseKcal = workout.calories;
   const stepKcal = steps?.calories || 0;
-  const activeKcal = exerciseKcal + stepKcal;
+  const activeKcal = round(exerciseKcal + stepKcal);
   const targets = {
     calorieTarget: user.profile?.calorieTarget || 0,
     proteinTarget: user.profile?.proteinTarget || 0,
@@ -197,15 +202,28 @@ async function dayPayload(user, date) {
     sodiumLimit: user.profile?.sodiumLimit || 2300,
   };
   const tdee = user.profile?.tdee || targets.calorieTarget || 0;
+  const energy = energyBalance({
+    method: user.profile?.calorieMethod,
+    bmr: user.profile?.bmr || 0,
+    tdee,
+    activityLevel: user.profile?.activityLevel || "light",
+    foodCalories: consumed.calories || 0,
+    stepKcal,
+    exerciseKcal,
+    cardioKcal: workout.cardioKcal,
+  });
   const remaining = round((targets.calorieTarget || 0) - (consumed.calories || 0));
-  const estimatedDeficit = round(tdee - (consumed.calories || 0) + activeKcal);
-  const net = round((consumed.calories || 0) - tdee - activeKcal);
   const insights = generateInsights({
     consumed,
     targets,
-    burned: activeKcal,
     meals: Object.fromEntries(Object.entries(mealMap).map(([k, v]) => [k, v.totals])),
+    method: energy.method,
   });
+  const goal = {
+    ...goalTimeline(user.profile || {}),
+    plannedDailyDeficit: round(tdee - (targets.calorieTarget || 0)),
+    plannedWeeklyDeficit: round(tdee - (targets.calorieTarget || 0)) * 7,
+  };
   return {
     date,
     meals: mealMap,
@@ -214,11 +232,17 @@ async function dayPayload(user, date) {
     exerciseKcal,
     stepKcal,
     activeKcal,
-    netCalories: net,
+    netCalories: round(-energy.estimatedDeficit),
     remaining,
     calorieBudget: targets.calorieTarget || 0,
     tdee,
-    estimatedDeficit,
+    bmr: energy.bmr,
+    calorieMethod: energy.method,
+    activityLabel: energy.activityLabel,
+    estimatedDeficit: energy.estimatedDeficit,
+    energy,
+    workout,
+    goal,
     percent: targets.calorieTarget ? round((consumed.calories / targets.calorieTarget) * 100) : 0,
     workouts,
     steps: steps || { steps: 0, calories: 0, date },
@@ -267,6 +291,7 @@ function createRouter() {
           targetWeightKg: Number(profile.targetWeightKg),
           targetDate: profile.targetDate,
           activityLevel: profile.activityLevel || "light",
+          calorieMethod: profile.calorieMethod === "activity" ? "activity" : "tdee",
           stepTarget: Number(profile.stepTarget) || 8000,
           calorieTarget: plan.calorieTarget,
           proteinTarget: plan.proteinTarget,
@@ -320,6 +345,7 @@ function createRouter() {
         passwordHash: await bcrypt.hash(`demo-${Date.now()}`, 10),
         profile: {
           ...profile,
+          calorieMethod: "tdee",
           startWeightKg: profile.currentWeightKg,
           calorieTarget: plan.calorieTarget,
           proteinTarget: plan.proteinTarget,
@@ -383,6 +409,7 @@ function createRouter() {
     req.user.name = req.body.name || req.user.name;
     req.user.profile = {
       ...p,
+      calorieMethod: p.calorieMethod === "activity" ? "activity" : "tdee",
       calorieTarget: plan.calorieTarget,
       proteinTarget: plan.proteinTarget,
       carbTarget: plan.carbTarget,
@@ -426,7 +453,7 @@ function createRouter() {
       owner: req.user._id,
       baseAmountG: 100,
       nutritionPer100g: nutritionPer100g || { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, sodium: 0 },
-      servings: servings || { grams: 1, ounces: 28.35, piece: 50, bowl: 200, cup: 150, serving: 150, small: 80, medium: 120, large: 180, extra_large: 240, tablespoon: 15, teaspoon: 5 },
+      servings: servings || { grams: 1, ounces: 28.35, piece: 50, bowl: 200, chutney_bowl: 100, cup: 150, serving: 150, small: 80, medium: 120, large: 180, extra_large: 240, tablespoon: 15, teaspoon: 5 },
       defaultUnit: defaultUnit || "grams",
       defaultQuantity: defaultQuantity || 100,
     });
@@ -745,6 +772,7 @@ function createRouter() {
     req.user.profile.carbTarget = plan.carbTarget;
     req.user.profile.fatTarget = plan.fatTarget;
     req.user.profile.fiberTarget = plan.fiberTarget;
+    if (!req.user.profile.calorieMethod) req.user.profile.calorieMethod = "tdee";
     await req.user.save();
     res.json({ log, user: publicUser(req.user) });
   });
@@ -763,6 +791,10 @@ function createRouter() {
     const loggedDays = days.filter((d) => d.consumed.calories > 0).length;
     const burnActual = days.reduce((s, d) => s + d.activeKcal, 0);
     const workoutsDone = days.filter((d) => d.workouts.length).length;
+    const energyWeek = weekEnergy(days, req.user.profile || {});
+    const totalSteps = days.reduce((s, d) => s + (Number(d.steps?.steps) || 0), 0);
+    const workoutCount = days.reduce((s, d) => s + (d.workout?.count || 0), 0);
+    const totalWorkoutDuration = days.reduce((s, d) => s + (d.workout?.durationMin || 0), 0);
     res.json({
       weekStart: req.params.weekStart,
       dates,
@@ -782,6 +814,18 @@ function createRouter() {
         burnActual: round(burnActual),
         burnDiff: round(burnActual - (req.user.profile?.weeklyBurnTarget || 0)),
         workoutsDone,
+        calorieMethod: req.user.profile?.calorieMethod === "activity" ? "activity" : "tdee",
+        targetDailyDeficit: energyWeek.targetDailyDeficit,
+        targetWeeklyDeficit: energyWeek.targetWeeklyDeficit,
+        actualDeficit: energyWeek.actualDeficit,
+        avgDailyDeficit: energyWeek.avgDailyDeficit,
+        deficitProgressPct: energyWeek.progressPct,
+        totalSteps,
+        avgSteps: round(totalSteps / 7),
+        workoutCount,
+        avgWorkoutDuration: workoutCount ? round(totalWorkoutDuration / workoutCount) : 0,
+        totalWorkoutDuration,
+        methodNote: days[0]?.energy?.methodNote,
       },
       estimated: true,
     });
@@ -794,18 +838,31 @@ function createRouter() {
     const current = p.currentWeightKg;
     const target = p.targetWeightKg;
     const lost = round((start || 0) - (current || 0), 1);
-    const remaining = round((current || 0) - (target || 0), 1);
     const span = Math.max(0.1, (start || 0) - (target || 0));
     const progress = span > 0 ? Math.min(100, Math.max(0, round(((start - current) / span) * 100))) : 0;
+    const timeline = goalTimeline(p || {});
+    const plannedDailyDeficit = round((p.tdee || 0) - (p.calorieTarget || 0));
     res.json({
       startWeight: start,
       currentWeight: current,
       targetWeight: target,
       totalLost: lost,
-      remaining,
+      remaining: timeline.remainingKg,
       targetDate: p.targetDate,
       progress,
       logs,
+      activityLabel: timeline.activityLabel,
+      calorieMethod: p.calorieMethod === "activity" ? "activity" : "tdee",
+      tdee: p.tdee,
+      bmr: p.bmr,
+      requiredWeeklyLossKg: timeline.requiredWeeklyLossKg,
+      requiredDailyDeficit: timeline.requiredDailyDeficit,
+      requiredWeeklyDeficit: timeline.requiredWeeklyDeficit,
+      weeksRemaining: timeline.weeksRemaining,
+      daysRemaining: timeline.daysRemaining,
+      plannedDailyDeficit,
+      plannedWeeklyDeficit: plannedDailyDeficit * 7,
+      targetsAreEstimates: true,
     });
   });
 

@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "../api";
 import { useApp } from "../AppContext";
-import { DateStrip, ProgressTabs, Shell, WeekSelector } from "../components";
-import { formatDate, formatNum, MEALS, startOfWeek, todayKey } from "../lib";
+import { DateStrip, ProgressTabs, Shell, WeekSelector, Tip, Explainer } from "../components";
+import { formatDate, formatNum, MEALS, startOfWeek, todayKey, TIPS } from "../lib";
 
 const tooltip = { background: "#fff", border: "1px solid #dce7e2", borderRadius: 8, fontSize: 12 };
 
@@ -24,6 +24,35 @@ export default function Weekly() {
       <WeekSelector weekStart={weekStart} onChange={setWeekStart} />
       {!data ? <div className="skeleton" style={{ height: 180 }} /> : (
         <>
+          <section className="card">
+            <Explainer>
+              <div className="section-head" style={{ marginBottom: 8 }}>
+                <h2>Weekly calorie summary</h2>
+                <Tip text={TIPS.deficit} />
+              </div>
+              <div className="kv-list">
+              <div className="kv"><span>Weekly food max</span><b>{formatNum(data.weekly.caloriesTarget)} kcal</b></div>
+              <div className="kv"><span>Weekly food intake</span><b>{formatNum(data.weekly.caloriesConsumed)} kcal</b></div>
+              <div className="kv total"><span>Weekly target deficit</span><b>{formatNum(data.weekly.targetWeeklyDeficit)} kcal</b></div>
+              <div className="kv"><span>Actual deficit</span><b>{formatNum(data.weekly.actualDeficit)} kcal</b></div>
+              <div className="kv"><span>Average daily deficit</span><b>{formatNum(data.weekly.avgDailyDeficit)} kcal</b></div>
+              <div className="kv"><span>Average daily steps</span><b>{formatNum(data.weekly.avgSteps)}</b></div>
+              <div className="kv"><span>Total weekly steps</span><b>{formatNum(data.weekly.totalSteps)}</b></div>
+              <div className="kv"><span>Workouts</span><b>{data.weekly.workoutCount}</b></div>
+              <div className="kv"><span>Average workout duration</span><b>{formatNum(data.weekly.avgWorkoutDuration)} min</b></div>
+            </div>
+            <p className="tiny" style={{ margin: "10px 0 6px" }}>Target weekly deficit vs actual</p>
+            <div className="bar-track" aria-label="Weekly deficit progress">
+              <span
+                className={`bar-fill ${data.weekly.actualDeficit < 0 ? "surplus" : ""}`}
+                style={{ width: `${data.weekly.deficitProgressPct ?? Math.min(100, Math.max(0, data.weekly.targetWeeklyDeficit ? (data.weekly.actualDeficit / data.weekly.targetWeeklyDeficit) * 100 : 0))}%` }}
+              />
+            </div>
+            <p className="tiny">{formatNum(data.weekly.actualDeficit)} of {formatNum(data.weekly.targetWeeklyDeficit)} kcal</p>
+            <p className="est">{data.weekly.methodNote || TIPS.activity}</p>
+            <p className="tiny">Actual deficit uses {data.weekly.loggedDays || 0} of 7 days with food logged. Empty days are not counted as extra deficit.</p>
+            </Explainer>
+          </section>
           <div className="kpi">
             <div><b>{formatNum(data.weekly.caloriesConsumed)}</b><span>Weekly kcal in</span></div>
             <div><b>{formatNum(data.weekly.caloriesTarget)}</b><span>Weekly food max</span></div>
@@ -46,6 +75,25 @@ export default function Weekly() {
                   <Tooltip contentStyle={tooltip} />
                   <Bar dataKey="target" fill="#c8eadf" radius={6} />
                   <Bar dataKey="consumed" fill="#0e8f78" radius={6} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <div className="card">
+            <h3>Target deficit vs actual</h3>
+            <div className="chart-box">
+              <ResponsiveContainer>
+                <BarChart data={(data.days || []).map((d) => ({
+                  name: formatDate(d.date, { weekday: "short" }),
+                  target: data.weekly.targetDailyDeficit,
+                  actual: (d.consumed?.calories || 0) > 0 ? (d.energy?.estimatedDeficit || 0) : 0,
+                }))}>
+                  <CartesianGrid stroke="#e6eeea" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip contentStyle={tooltip} />
+                  <Bar dataKey="target" fill="#c8eadf" radius={6} />
+                  <Bar dataKey="actual" fill="#0e8f78" radius={6} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -81,6 +129,24 @@ export function Journey() {
             <div><b>{data.remaining} kg</b><span>Remaining</span></div>
             <div><b>{data.progress}%</b><span>Progress</span></div>
           </div>
+          <section className="card" style={{ marginTop: 12 }}>
+            <Explainer>
+              <div className="section-head" style={{ marginBottom: 8 }}>
+                <h2>Timeline targets</h2>
+                <Tip text={TIPS.goal} />
+              </div>
+              <div className="kv-list">
+                <div className="kv"><span>Current weight</span><b>{formatNum(data.currentWeight, 2)} kg</b></div>
+                <div className="kv"><span>Target weight</span><b>{formatNum(data.targetWeight, 2)} kg</b></div>
+                <div className="kv"><span>Remaining</span><b>{formatNum(data.remaining, 2)} kg</b></div>
+                <div className="kv"><span>Target date</span><b>{data.targetDate ? formatDate(data.targetDate, { day: "numeric", month: "short", year: "numeric" }) : "—"}</b></div>
+                <div className="kv"><span>Required weekly loss</span><b>~{formatNum(data.requiredWeeklyLossKg || 0, 2)} kg</b></div>
+                <div className="kv"><span>Required daily deficit</span><b>~{formatNum(data.requiredDailyDeficit || 0)} kcal</b></div>
+                <div className="kv"><span>Required weekly deficit</span><b>~{formatNum(data.requiredWeeklyDeficit || 0)} kcal</b></div>
+              </div>
+              <p className="est">These are targets based on your weight-loss timeline, not guaranteed outcomes. Activity calories are tracked separately.</p>
+            </Explainer>
+          </section>
           <p className="tiny" style={{ margin: "8px 0 12px" }}>Target date {data.targetDate}. Weekly pace is calculated from your goal and date.</p>
           <div className="card">
             <h3>Weight vs date</h3>
@@ -124,8 +190,8 @@ export function WeeklyWorkouts() {
         <>
           <div className="kpi">
             <div><b>{data.weekly.workoutsDone} / 7</b><span>Workouts logged</span></div>
-            <div><b>{formatNum(data.weekly.burnActual)}</b><span>kcal burned</span></div>
-            <div><b>{formatNum(data.weekly.burnTarget)}</b><span>Weekly burn target</span></div>
+            <div><b>{formatNum(data.weekly.burnActual)}</b><span>Activity kcal</span></div>
+            <div><b>{formatNum(data.weekly.burnTarget)}</b><span>Weekly activity target</span></div>
             <div><b>{formatNum(data.weekly.burnDiff)}</b><span>Difference</span></div>
           </div>
           <div className="card" style={{ marginTop: 12 }}>
@@ -140,7 +206,7 @@ export function WeeklyWorkouts() {
             })}
           </div>
           <div className="card">
-            <h3>Target burn vs actual</h3>
+            <h3>Target activity vs logged</h3>
             <div className="chart-box">
               <ResponsiveContainer>
                 <BarChart data={chart}>
@@ -230,14 +296,30 @@ export function DailySummary() {
       <header className="page-head"><div><div className="greet">{formatDate(date)}</div><h1>Daily summary</h1></div></header>
       <ProgressTabs />
       <div className="card">
+        <h3>Food</h3>
         <p>Calories: {formatNum(day.consumed.calories)} / {formatNum(day.targets.calorieTarget)} max</p>
         <p>Protein: {formatNum(day.consumed.protein, 0)} / {day.targets.proteinTarget}g</p>
         <p>Carbs: {formatNum(day.consumed.carbs, 0)} / {day.targets.carbTarget}g</p>
         <p>Fat: {formatNum(day.consumed.fat, 0)} / {day.targets.fatTarget}g</p>
         <p>Left to eat: {formatNum(Math.max(0, day.remaining))} kcal</p>
-        <p>Steps: {formatNum(day.steps?.steps || 0)} · ~{formatNum(day.stepKcal)} kcal burned</p>
-        <p>Activity: {formatNum(day.activeKcal)} kcal burned</p>
-        <p>Estimated deficit: {formatNum(day.estimatedDeficit || 0)} kcal vs maintenance</p>
+      </div>
+      <div className="card">
+        <Explainer>
+          <h3>Estimated deficit <Tip text={TIPS.deficit} /></h3>
+          <p>TDEE / maintenance: {formatNum(day.energy?.tdee || day.tdee)} kcal</p>
+          <p>Food consumed: {formatNum(day.consumed.calories)} kcal</p>
+          <p>Estimated deficit: {formatNum(day.energy?.estimatedDeficit ?? day.estimatedDeficit ?? 0)} kcal</p>
+          <p className="est">{day.energy?.methodNote || TIPS.activity}</p>
+        </Explainer>
+      </div>
+      <div className="card">
+        <Explainer>
+          <h3>Activity stats <Tip text={TIPS.activity} /></h3>
+          <p>Steps: {formatNum(day.steps?.steps || 0)}</p>
+          <p>Walking calories: {formatNum(day.stepKcal)} kcal</p>
+          <p>Workout calories: {formatNum(day.exerciseKcal)} kcal</p>
+          <p>Estimated activity calories: {formatNum(day.activeKcal)} kcal</p>
+        </Explainer>
       </div>
       <div className="card">
         <h3>Observations</h3>

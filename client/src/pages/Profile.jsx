@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useApp } from "../AppContext";
-import { Shell } from "../components";
-import { ACTIVITY } from "../lib";
+import { Shell, Tip, Explainer } from "../components";
+import { ACTIVITY, TIPS } from "../lib";
 import { api } from "../api";
 
 export default function Profile() {
@@ -16,6 +16,7 @@ export default function Profile() {
     targetWeightKg: p.targetWeightKg,
     targetDate: p.targetDate,
     activityLevel: p.activityLevel,
+    calorieMethod: p.calorieMethod === "activity" ? "activity" : "tdee",
     stepTarget: p.stepTarget,
   });
   const [plan, setPlan] = useState(null);
@@ -60,10 +61,29 @@ export default function Profile() {
           <div className="field"><label>Target weight (kg)</label><input type="number" step="0.1" value={form.targetWeightKg} onChange={(e) => set("targetWeightKg", Number(e.target.value))} /></div>
           <div className="field"><label>Target date</label><input type="date" value={form.targetDate} onChange={(e) => set("targetDate", e.target.value)} /></div>
         </div>
-        <div className="field"><label>Activity</label>
+        <div className="field"><label>Activity level</label>
           <select value={form.activityLevel} onChange={(e) => set("activityLevel", e.target.value)}>
             {ACTIVITY.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
           </select>
+        </div>
+        <div className="field">
+          <Explainer>
+            <label>Calorie calculation method <Tip text={TIPS.method} /></label>
+            <label className={`choice ${form.calorieMethod !== "activity" ? "on" : ""}`}>
+              <input type="radio" name="calorieMethod" checked={form.calorieMethod !== "activity"} onChange={() => set("calorieMethod", "tdee")} />
+              <div>
+                <b>TDEE based (recommended)</b>
+                <span className="tiny">Uses TDEE − food consumed.</span>
+              </div>
+            </label>
+            <label className={`choice ${form.calorieMethod === "activity" ? "on" : ""}`}>
+              <input type="radio" name="calorieMethod" checked={form.calorieMethod === "activity"} onChange={() => set("calorieMethod", "activity")} />
+              <div>
+                <b>Activity based (advanced)</b>
+                <span className="tiny">Uses sedentary baseline + active activity calories − food consumed.</span>
+              </div>
+            </label>
+          </Explainer>
         </div>
         <div className="field"><label>Step target</label><input type="number" value={form.stepTarget} onChange={(e) => set("stepTarget", Number(e.target.value))} /></div>
         <button className="btn block">Recalculate targets</button>
@@ -73,6 +93,8 @@ export default function Profile() {
         <div><span className="tiny">BMI</span><b>{p.bmi}</b></div>
         <div><span className="tiny">BMR</span><b>{p.bmr}</b></div>
         <div><span className="tiny">TDEE</span><b>{p.tdee}</b></div>
+        <div><span className="tiny">Activity</span><b>{ACTIVITY.find((a) => a.id === p.activityLevel)?.label || p.activityLevel}</b></div>
+        <div><span className="tiny">Method</span><b>{p.calorieMethod === "activity" ? "Activity" : "TDEE"}</b></div>
         <div><span className="tiny">Daily max</span><b>{p.calorieTarget}</b></div>
         <div><span className="tiny">Protein</span><b>{p.proteinTarget}g</b></div>
         <div><span className="tiny">Carbs</span><b>{p.carbTarget}g</b></div>

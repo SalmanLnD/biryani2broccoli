@@ -12,6 +12,7 @@ export const UNITS = [
   "ounces",
   "piece",
   "bowl",
+  "chutney_bowl",
   "cup",
   "small",
   "medium",
@@ -27,6 +28,7 @@ export const UNIT_LABEL = {
   ounces: "ounces",
   piece: "pieces",
   bowl: "bowl",
+  chutney_bowl: "chutney bowl",
   cup: "cup",
   small: "small",
   medium: "medium",
@@ -35,6 +37,17 @@ export const UNIT_LABEL = {
   tablespoon: "tbsp",
   teaspoon: "tsp",
   serving: "serving",
+};
+
+export const TIPS = {
+  tdee: "TDEE is an estimate of how many calories you typically burn in a day. It is BMR multiplied by your selected activity level.",
+  bmr: "BMR is an estimate of calories your body uses at rest. TDEE then adds typical daily activity on top of that.",
+  deficit: "Estimated deficit is maintenance calories minus food eaten. A positive number means you ate less than maintenance. It is an estimate, not a guarantee of fat loss.",
+  activity: "Steps, walking calories, and workout calories are tracked for reference. They are not added on top of TDEE in the recommended calculation.",
+  doubleCount: "Adding walking or workout calories on top of TDEE would count typical activity twice, because TDEE already includes your activity level.",
+  method: "TDEE-based calculation is simpler and helps prevent double-counting activity when your activity level is already included in TDEE.",
+  activeCalories: "Active calories try to count extra movement only, not the resting burn already included in a workout or walking estimate.",
+  goal: "These numbers are targets from your current weight, goal weight, and date. They are not guaranteed outcomes.",
 };
 
 export const ACTIVITY = [

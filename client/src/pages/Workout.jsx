@@ -52,7 +52,7 @@ export default function WorkoutHome() {
       const data = await api.setSteps(date, count);
       if (data.day) setDay(data.day);
       setSteps(data.steps?.steps ?? count);
-      setSaved(`Saved ${Number(data.steps?.steps || count).toLocaleString()} steps. About ${formatNum(data.steps?.calories || 0)} kcal burned — that increases the deficit, not the food max.`);
+      setSaved(`Saved ${Number(data.steps?.steps || count).toLocaleString()} steps. About ${formatNum(data.steps?.calories || 0)} kcal walking estimated — shown as activity, not added to the TDEE deficit.`);
     } catch (err) {
       setStepError(err.message || "Could not save steps.");
     } finally {
@@ -87,7 +87,7 @@ export default function WorkoutHome() {
 
       <form className="card" onSubmit={saveSteps}>
         <h3>Steps</h3>
-        <p className="tiny">Walking calories count as energy burned. They increase today's deficit and do not raise the food maximum. Estimate only.</p>
+        <p className="tiny">Walking calories are estimated activity stats. They stay visible here and on the dashboard, and are not added on top of TDEE in the recommended calculation.</p>
         <div className="qty">
           <button type="button" onClick={() => setSteps(Math.max(0, Number(steps) - 500))}>−</button>
           <input
@@ -381,7 +381,7 @@ export function WorkoutSummary() {
         <div className="card">
           <h3>Compared with previous</h3>
           <p className="insight">Last session {prev.date}: {prev.durationMin || 0} min, ~{formatNum(prev.calories)} kcal</p>
-          <p className="tiny">Calories burned are estimates from duration, body weight and activity type.</p>
+          <p className="tiny">Calories burned are estimates from duration, body weight and activity type. They are activity stats, not extra deficit on top of TDEE.</p>
         </div>
       )}
       <div className="card">

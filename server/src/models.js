@@ -23,6 +23,7 @@ const ProfileSchema = new mongoose.Schema(
     targetWeightKg: Number,
     targetDate: String,
     activityLevel: { type: String, default: "light" },
+    calorieMethod: { type: String, enum: ["tdee", "activity"], default: "tdee" },
     stepTarget: { type: Number, default: 8000 },
     calorieTarget: Number,
     proteinTarget: Number,

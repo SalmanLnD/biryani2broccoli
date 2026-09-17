@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useApp } from "../AppContext";
-import { CalorieHero, DateStrip, Shell } from "../components";
+import { CalorieHero, DateStrip, DeficitSummary, ActivityCard, GoalSnapshot, Shell } from "../components";
 import { formatDate, formatNum, MEALS } from "../lib";
 
 export default function Dashboard() {
@@ -24,7 +24,18 @@ export default function Dashboard() {
       </header>
       <DateStrip />
       {loading && !day && <div className="skeleton" style={{ height: 220, marginBottom: 16 }} />}
-      {day && <CalorieHero day={day} />}
+      {day && (
+        <>
+          <DeficitSummary day={day} />
+          <div className="dash-stack">
+            <CalorieHero day={day} />
+            <div className="dash-grid">
+              <ActivityCard day={day} />
+              <GoalSnapshot day={day} user={user} />
+            </div>
+          </div>
+        </>
+      )}
 
       <section className="section">
         <div className="section-head">

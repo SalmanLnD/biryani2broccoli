@@ -8,6 +8,8 @@ const ACTIVITY_FACTORS = {
 
 const MIN_CALORIES = { female: 1200, male: 1500, other: 1300 };
 const KCAL_PER_KG = 7700;
+const WALKING_MET = 3.3;
+const WORKOUT_MET = 5;
 
 function round(n, d = 0) {
   const p = 10 ** d;
@@ -29,6 +31,135 @@ function bmrMifflin({ sex, weightKg, heightCm, age }) {
 function tdeeFrom(bmrValue, activityLevel) {
   const factor = ACTIVITY_FACTORS[activityLevel]?.factor || 1.2;
   return round(bmrValue * factor);
+}
+
+function sedentaryExpenditure(bmrValue) {
+  return tdeeFrom(bmrValue, "sedentary");
+}
+
+function netActiveKcal(grossKcal, met = WORKOUT_MET) {
+  const gross = Number(grossKcal) || 0;
+  const m = Number(met) || WORKOUT_MET;
+  if (m <= 1) return 0;
+  return round(Math.max(0, gross * ((m - 1) / m)));
+}
+
+function summarizeWorkouts(workouts) {
+  const list = workouts || [];
+  let durationMin = 0;
+  let calories = 0;
+  let cardioKcal = 0;
+  for (const w of list) {
+    durationMin += Number(w.durationMin) || 0;
+    calories += Number(w.calories) || 0;
+    for (const ex of w.exercises || []) {
+      if (ex.kind === "cardio") {
+        cardioKcal += (ex.sets || []).reduce((s, set) => s + (Number(set.calories) || 0), 0);
+      }
+    }
+  }
+  return {
+    count: list.length,
+    durationMin: round(durationMin),
+    calories: round(calories),
+    cardioKcal: round(cardioKcal),
+  };
+}
+
+function goalTimeline(profile = {}) {
+  const current = Number(profile.currentWeightKg) || 0;
+  const target = Number(profile.targetWeightKg) || 0;
+  const remainingKg = round(current - target, 2);
+  const daysRemaining = daysUntil(profile.targetDate);
+  const weeksRemaining = Math.max(daysRemaining / 7, 1);
+  const requiredWeeklyLossKg = remainingKg > 0.2 ? round(remainingKg / weeksRemaining, 2) : 0;
+  const requiredDailyDeficit = remainingKg > 0.2 ? round((requiredWeeklyLossKg * KCAL_PER_KG) / 7) : 0;
+  return {
+    currentWeightKg: round(current, 2),
+    targetWeightKg: round(target, 2),
+    remainingKg,
+    targetDate: profile.targetDate || "",
+    daysRemaining,
+    weeksRemaining: round(weeksRemaining, 1),
+    requiredWeeklyLossKg,
+    requiredDailyDeficit,
+    requiredWeeklyDeficit: requiredDailyDeficit * 7,
+    activityLabel: ACTIVITY_FACTORS[profile.activityLevel]?.label || "",
+  };
+}
+
+function energyBalance({
+  method = "tdee",
+  bmr = 0,
+  tdee = 0,
+  activityLevel = "light",
+  foodCalories = 0,
+  stepKcal = 0,
+  exerciseKcal = 0,
+  cardioKcal = 0,
+} = {}) {
+  const methodId = method === "activity" ? "activity" : "tdee";
+  const food = Number(foodCalories) || 0;
+  const walkGross = Number(stepKcal) || 0;
+  const workoutGross = Number(exerciseKcal) || 0;
+  const walkActive = netActiveKcal(walkGross, WALKING_MET);
+  const workoutActive = netActiveKcal(workoutGross, WORKOUT_MET);
+  const baselineKcal = sedentaryExpenditure(bmr);
+  const activityLabel = ACTIVITY_FACTORS[activityLevel]?.label || "Lightly active";
+  const activityFactor = ACTIVITY_FACTORS[activityLevel]?.factor || 1.375;
+
+  let expenditure;
+  let estimatedDeficit;
+  let methodNote;
+  if (methodId === "activity") {
+    expenditure = round(baselineKcal + walkActive + workoutActive);
+    estimatedDeficit = round(expenditure - food);
+    methodNote = "Activity-based mode uses sedentary baseline plus estimated active calories. Walking and workout totals shown for reference are converted to active calories so resting burn is not counted twice.";
+  } else {
+    expenditure = round(tdee);
+    estimatedDeficit = round(expenditure - food);
+    methodNote = "Your TDEE already accounts for your selected activity level. Activity calories shown below are tracked for reference and are not added again.";
+  }
+
+  return {
+    method: methodId,
+    bmr: round(bmr),
+    tdee: round(tdee),
+    activityLevel,
+    activityLabel,
+    activityFactor,
+    foodCalories: round(food),
+    stepKcal: round(walkGross),
+    exerciseKcal: round(workoutGross),
+    cardioKcal: round(cardioKcal),
+    walkActiveKcal: walkActive,
+    workoutActiveKcal: workoutActive,
+    baselineKcal,
+    expenditure,
+    estimatedDeficit,
+    surplus: estimatedDeficit < 0,
+    methodNote,
+  };
+}
+
+function weekEnergy(days = [], profile = {}) {
+  const tdee = Number(profile.tdee) || 0;
+  const calorieTarget = Number(profile.calorieTarget) || 0;
+  const targetDailyDeficit = round(tdee - calorieTarget);
+  const targetWeeklyDeficit = targetDailyDeficit * 7;
+  const logged = (days || []).filter((d) => (d.consumed?.calories || 0) > 0);
+  const actualDeficit = round(logged.reduce((s, d) => s + (Number(d.energy?.estimatedDeficit) || 0), 0));
+  const loggedDays = logged.length;
+  return {
+    targetDailyDeficit,
+    targetWeeklyDeficit,
+    actualDeficit,
+    avgDailyDeficit: loggedDays ? round(actualDeficit / loggedDays) : 0,
+    loggedDays,
+    progressPct: targetWeeklyDeficit
+      ? Math.min(100, Math.max(0, round((actualDeficit / targetWeeklyDeficit) * 100)))
+      : 0,
+  };
 }
 
 function daysUntil(dateStr) {
@@ -96,6 +227,9 @@ function suggestedPlan(profile) {
     note,
     weeklyLossCapKg,
     activityLabel: ACTIVITY_FACTORS[activityLevel]?.label || "Sedentary",
+    ...goalTimeline({ currentWeightKg, targetWeightKg, targetDate, activityLevel }),
+    plannedDailyDeficit: round(tdee - calorieTarget),
+    plannedWeeklyDeficit: round(tdee - calorieTarget) * 7,
   };
 }
 
@@ -178,7 +312,7 @@ function sessionStats(exercises) {
   return { sets, reps, volume: round(volume) };
 }
 
-function generateInsights({ consumed, targets, burned, meals }) {
+function generateInsights({ consumed, targets, meals, method }) {
   const insights = [];
   const remaining = round((targets.calorieTarget || 0) - (consumed.calories || 0));
   if ((consumed.protein || 0) < (targets.proteinTarget || 0) * 0.9) {
@@ -199,8 +333,10 @@ function generateInsights({ consumed, targets, burned, meals }) {
   } else {
     insights.push("Calories are near today's food maximum.");
   }
-  if ((burned || 0) > 50) {
-    insights.push(`Activity is about ${burned} kcal. That increases the estimated deficit; it does not raise the food maximum.`);
+  if (method === "activity") {
+    insights.push("Deficit uses sedentary baseline plus estimated active calories, not a second copy of TDEE.");
+  } else {
+    insights.push("Deficit is TDEE minus food. Steps and workouts are logged separately.");
   }
   if ((consumed.fiber || 0) < (targets.fiberTarget || 0) * 0.7) {
     insights.push("Fiber is on the lower side — vegetables, dal, or fruit can help.");
@@ -239,6 +375,12 @@ module.exports = {
   bmi,
   bmrMifflin,
   tdeeFrom,
+  sedentaryExpenditure,
+  netActiveKcal,
+  summarizeWorkouts,
+  goalTimeline,
+  energyBalance,
+  weekEnergy,
   suggestedPlan,
   unitToGrams,
   scaleNutrition,
