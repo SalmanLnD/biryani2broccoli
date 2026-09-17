@@ -20,12 +20,18 @@ const {
   generateInsights,
   localDateKey,
   startOfWeek,
+  addDays,
   weekDates,
   round,
   energyBalance,
   summarizeWorkouts,
   goalTimeline,
   weekEnergy,
+  applyWeighInPlan,
+  weighInWeekday,
+  weighInPrompt,
+  weeklyWeightProgress,
+  daysBetween,
 } = require("./calc");
 
 const MEAL_SLOTS = ["breakfast", "morning_snack", "lunch", "evening_snack", "dinner", "other"];
@@ -219,6 +225,18 @@ async function dayPayload(user, date) {
     meals: Object.fromEntries(Object.entries(mealMap).map(([k, v]) => [k, v.totals])),
     method: energy.method,
   });
+  const weekStart = startOfWeek(date);
+  const weekLogs = await WeightLog.find({
+    user: user._id,
+    date: { $gte: weekStart, $lte: addDays(weekStart, 6) },
+  });
+  const lastLog = await WeightLog.findOne({ user: user._id, date: { $lte: date } }).sort({ date: -1 });
+  const weighIn = weighInPrompt({
+    date,
+    today: localDateKey(),
+    weekLogs,
+    lastWeightKg: lastLog?.weightKg || user.profile?.currentWeightKg,
+  });
   const goal = {
     ...goalTimeline(user.profile || {}),
     plannedDailyDeficit: round(tdee - (targets.calorieTarget || 0)),
@@ -247,6 +265,7 @@ async function dayPayload(user, date) {
     workouts,
     steps: steps || { steps: 0, calories: 0, date },
     weight,
+    weighIn,
     insights,
     estimated: true,
   };
@@ -749,20 +768,33 @@ function createRouter() {
     if (!weightKg || weightKg < 30 || weightKg > 250) {
       return res.status(400).json({ error: "Enter a weight between 30 and 250 kg." });
     }
+    const date = req.params.date;
+    const prev = await WeightLog.findOne({ user: req.user._id, date: { $lt: date } }).sort({ date: -1 });
+    let avgDailyIntake = 0;
+    let gap = 0;
+    if (prev?.weightKg) {
+      gap = daysBetween(prev.date, date);
+      const meals = await Meal.find({ user: req.user._id, date: { $gt: prev.date, $lte: date } });
+      const foodCalories = meals.reduce(
+        (s, m) => s + (m.items || []).reduce((a, item) => a + (Number(item.calories) || 0), 0),
+        0
+      );
+      const loggedDays = new Set(meals.filter((m) => (m.items || []).length).map((m) => m.date)).size;
+      avgDailyIntake = loggedDays ? round(foodCalories / loggedDays) : 0;
+    }
+    const weekday = weighInWeekday(date);
+    const note = req.body.note || (weekday ? `${weekday} weigh-in` : "");
     const log = await WeightLog.findOneAndUpdate(
-      { user: req.user._id, date: req.params.date },
-      { weightKg, note: req.body.note || "" },
+      { user: req.user._id, date },
+      { weightKg, note },
       { upsert: true, new: true }
     );
     req.user.profile.currentWeightKg = weightKg;
-    const plan = suggestedPlan({
-      sex: req.user.profile.sex,
-      age: req.user.profile.age,
-      heightCm: req.user.profile.heightCm,
-      currentWeightKg: weightKg,
-      targetWeightKg: req.user.profile.targetWeightKg,
-      targetDate: req.user.profile.targetDate,
-      activityLevel: req.user.profile.activityLevel,
+    const plan = applyWeighInPlan(req.user.profile.toObject(), {
+      newWeightKg: weightKg,
+      prevWeightKg: prev?.weightKg,
+      daysBetween: gap,
+      avgDailyIntake,
     });
     req.user.profile.bmi = plan.bmi;
     req.user.profile.bmr = plan.bmr;
@@ -772,9 +804,19 @@ function createRouter() {
     req.user.profile.carbTarget = plan.carbTarget;
     req.user.profile.fatTarget = plan.fatTarget;
     req.user.profile.fiberTarget = plan.fiberTarget;
+    req.user.profile.sugarLimit = plan.sugarLimit;
+    req.user.profile.sodiumLimit = plan.sodiumLimit;
+    req.user.profile.weeklyBurnTarget = plan.weeklyBurnTarget;
+    req.user.profile.estimatesNote = plan.note;
     if (!req.user.profile.calorieMethod) req.user.profile.calorieMethod = "tdee";
     await req.user.save();
-    res.json({ log, user: publicUser(req.user) });
+    const logs = await WeightLog.find({ user: req.user._id }).sort({ date: 1 });
+    res.json({
+      log,
+      user: publicUser(req.user),
+      plan,
+      weightProgress: weeklyWeightProgress(logs),
+    });
   });
 
   r.get("/week/:weekStart", auth, async (req, res) => {
@@ -863,6 +905,8 @@ function createRouter() {
       plannedDailyDeficit,
       plannedWeeklyDeficit: plannedDailyDeficit * 7,
       targetsAreEstimates: true,
+      weightProgress: weeklyWeightProgress(logs),
+      estimatesNote: p.estimatesNote,
     });
   });
 

@@ -173,7 +173,8 @@ function daysUntil(dateStr) {
 function suggestedPlan(profile) {
   const { sex, age, heightCm, currentWeightKg, targetWeightKg, targetDate, activityLevel } = profile;
   const bmrValue = bmrMifflin({ sex, weightKg: currentWeightKg, heightCm, age });
-  const tdee = tdeeFrom(bmrValue, activityLevel);
+  let tdee = tdeeFrom(bmrValue, activityLevel);
+  if (profile.tdeeOverride) tdee = round(profile.tdeeOverride);
   const bmiValue = bmi(currentWeightKg, heightCm);
   const toLose = currentWeightKg - targetWeightKg;
   const days = daysUntil(targetDate);
@@ -230,6 +231,115 @@ function suggestedPlan(profile) {
     ...goalTimeline({ currentWeightKg, targetWeightKg, targetDate, activityLevel }),
     plannedDailyDeficit: round(tdee - calorieTarget),
     plannedWeeklyDeficit: round(tdee - calorieTarget) * 7,
+  };
+}
+
+function weekdayOf(dateKey) {
+  return new Date(`${dateKey}T00:00:00`).getDay();
+}
+
+function daysBetween(fromKey, toKey) {
+  return Math.max(1, Math.round((new Date(`${toKey}T00:00:00`) - new Date(`${fromKey}T00:00:00`)) / 86400000));
+}
+
+function isWeighInDay(dateKey) {
+  const d = weekdayOf(dateKey);
+  return d === 1 || d === 6;
+}
+
+function weighInWeekday(dateKey) {
+  const d = weekdayOf(dateKey);
+  if (d === 1) return "Monday";
+  if (d === 6) return "Saturday";
+  return "";
+}
+
+function weighInPrompt({ date, today, weekLogs = [], lastWeightKg } = {}) {
+  const weekStart = startOfWeek(date);
+  const monday = weekStart;
+  const saturday = addDays(weekStart, 5);
+  const has = (d) => (weekLogs || []).some((l) => l.date === d && Number(l.weightKg) > 0);
+  const mondayKg = (weekLogs || []).find((l) => l.date === monday)?.weightKg;
+  const saturdayKg = (weekLogs || []).find((l) => l.date === saturday)?.weightKg;
+  const todayDay = weekdayOf(today || date);
+  const viewingCurrentWeek = startOfWeek(today || date) === weekStart;
+  let askDate = "";
+  let weekday = "";
+  if (!has(monday) && (date === monday || (viewingCurrentWeek && todayDay >= 1 && todayDay <= 5))) {
+    askDate = monday;
+    weekday = "Monday";
+  } else if (!has(saturday) && (date === saturday || (viewingCurrentWeek && (todayDay === 6 || todayDay === 0)))) {
+    askDate = saturday;
+    weekday = "Saturday";
+  }
+  return {
+    needed: Boolean(askDate),
+    askDate,
+    weekday,
+    isWeighInDay: isWeighInDay(date),
+    logged: has(date),
+    lastWeightKg: lastWeightKg ? round(lastWeightKg, 2) : null,
+    mondayLogged: has(monday),
+    saturdayLogged: has(saturday),
+    mondayKg: mondayKg ? round(mondayKg, 2) : null,
+    saturdayKg: saturdayKg ? round(saturdayKg, 2) : null,
+    weekChangeKg: mondayKg && saturdayKg ? round(saturdayKg - mondayKg, 2) : null,
+  };
+}
+
+function weeklyWeightProgress(logs = []) {
+  const list = [...(logs || [])].filter((l) => Number(l.weightKg) > 0).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const byWeek = {};
+  for (const log of list) {
+    const ws = startOfWeek(log.date);
+    if (!byWeek[ws]) byWeek[ws] = { weekStart: ws, monday: null, saturday: null };
+    const day = weekdayOf(log.date);
+    if (day === 1) byWeek[ws].monday = log;
+    if (day === 6) byWeek[ws].saturday = log;
+  }
+  const weekStarts = Object.keys(byWeek).sort();
+  let prevSaturday = null;
+  const weeks = weekStarts.map((ws) => {
+    const w = byWeek[ws];
+    const mondayKg = w.monday ? round(w.monday.weightKg, 2) : null;
+    const saturdayKg = w.saturday ? round(w.saturday.weightKg, 2) : null;
+    const weekChangeKg = mondayKg != null && saturdayKg != null ? round(saturdayKg - mondayKg, 2) : null;
+    const vsLastSaturdayKg = prevSaturday != null && saturdayKg != null ? round(saturdayKg - prevSaturday, 2) : null;
+    if (saturdayKg != null) prevSaturday = saturdayKg;
+    return { weekStart: ws, mondayKg, saturdayKg, weekChangeKg, vsLastSaturdayKg };
+  });
+  return { weeks: weeks.slice(-8), latest: weeks[weeks.length - 1] || null };
+}
+
+function applyWeighInPlan(profile, { newWeightKg, prevWeightKg, daysBetween: gap, avgDailyIntake } = {}) {
+  const base = suggestedPlan({ ...profile, currentWeightKg: newWeightKg });
+  const canAdapt = prevWeightKg > 0 && gap >= 4 && gap <= 10 && avgDailyIntake > 800;
+  if (!canAdapt) {
+    return {
+      ...base,
+      adapted: false,
+      tdeeSource: "weight",
+      formulaTdee: base.tdee,
+      note: `TDEE was recalculated from this weigh-in (${round(newWeightKg, 2)} kg). ${base.note}`,
+    };
+  }
+  const kgLost = round(prevWeightKg - newWeightKg, 2);
+  const observedTdee = round(avgDailyIntake + (kgLost * KCAL_PER_KG) / gap);
+  const lo = round(base.tdee * 0.88);
+  const hi = round(base.tdee * 1.12);
+  const blended = round(base.tdee * 0.65 + observedTdee * 0.35);
+  const tdee = Math.min(hi, Math.max(lo, blended));
+  const adapted = suggestedPlan({ ...profile, currentWeightKg: newWeightKg, tdeeOverride: tdee });
+  const lost = kgLost > 0;
+  const changeText = `${Math.abs(kgLost)} kg ${lost ? "down" : "up"} over ${gap} days`;
+  return {
+    ...adapted,
+    adapted: tdee !== base.tdee,
+    tdeeSource: "weekly-weigh-in",
+    formulaTdee: base.tdee,
+    observedTdee,
+    weeklyChangeKg: round(-kgLost, 2),
+    note: `TDEE is now ${adapted.tdee} kcal from your weigh-in (${round(newWeightKg, 2)} kg) and recent change (${changeText}). Formula TDEE was ${base.tdee} kcal. ${adapted.note}`,
   };
 }
 
@@ -382,6 +492,12 @@ module.exports = {
   energyBalance,
   weekEnergy,
   suggestedPlan,
+  applyWeighInPlan,
+  isWeighInDay,
+  weighInWeekday,
+  weighInPrompt,
+  weeklyWeightProgress,
+  daysBetween,
   unitToGrams,
   scaleNutrition,
   sumNutrition,

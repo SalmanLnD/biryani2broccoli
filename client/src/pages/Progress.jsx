@@ -148,6 +148,26 @@ export function Journey() {
             </Explainer>
           </section>
           <p className="tiny" style={{ margin: "8px 0 12px" }}>Target date {data.targetDate}. Weekly pace is calculated from your goal and date.</p>
+          {data.weightProgress && (
+            <section className="card">
+              <h3>Monday & Saturday weigh-ins</h3>
+              <p className="tiny">Weekly progress uses those two check-ins. TDEE is recalculated when you log them.</p>
+              <div className="kv-list">
+                <div className="kv"><span>This week Monday</span><b>{data.weightProgress.latest?.mondayKg != null ? `${formatNum(data.weightProgress.latest.mondayKg, 2)} kg` : "—"}</b></div>
+                <div className="kv"><span>This week Saturday</span><b>{data.weightProgress.latest?.saturdayKg != null ? `${formatNum(data.weightProgress.latest.saturdayKg, 2)} kg` : "—"}</b></div>
+                <div className="kv"><span>Mon to Sat change</span><b>{data.weightProgress.latest?.weekChangeKg == null ? "—" : `${data.weightProgress.latest.weekChangeKg > 0 ? "+" : ""}${formatNum(data.weightProgress.latest.weekChangeKg, 2)} kg`}</b></div>
+                <div className="kv"><span>Vs last Saturday</span><b>{data.weightProgress.latest?.vsLastSaturdayKg == null ? "—" : `${data.weightProgress.latest.vsLastSaturdayKg > 0 ? "+" : ""}${formatNum(data.weightProgress.latest.vsLastSaturdayKg, 2)} kg`}</b></div>
+              </div>
+              {(data.weightProgress.weeks || []).slice().reverse().map((week) => (
+                <p key={week.weekStart} className="insight">
+                  Week of {formatDate(week.weekStart, { day: "numeric", month: "short" })}
+                  {": "}Mon {week.mondayKg ?? "—"} · Sat {week.saturdayKg ?? "—"}
+                  {week.weekChangeKg != null ? ` · ${week.weekChangeKg > 0 ? "+" : ""}${week.weekChangeKg} kg` : ""}
+                </p>
+              ))}
+              {data.tdee ? <p className="est">Current TDEE {formatNum(data.tdee)} kcal · BMR {formatNum(data.bmr)} kcal. {data.estimatesNote}</p> : null}
+            </section>
+          )}
           <div className="card">
             <h3>Weight vs date</h3>
             <div className="chart-box">

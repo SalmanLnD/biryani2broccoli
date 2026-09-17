@@ -628,6 +628,11 @@ h3 { font-size: 0.95rem; }
   padding: 4px 8px;
   white-space: nowrap;
 }
+.weigh-in {
+  border-color: var(--mint-2);
+  background: linear-gradient(180deg, #f3fbf8 0%, #fff 40%);
+}
+.weigh-in h2 { margin-bottom: 6px; }
 .activity-card { border-left: 4px solid var(--mint-2); }
 .tip {
   width: 18px;
