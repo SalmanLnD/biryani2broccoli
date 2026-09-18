@@ -9,6 +9,15 @@ const ACTIVITY_FACTORS = {
 const MIN_CALORIES = { female: 1200, male: 1500, other: 1300 };
 const KCAL_PER_KG = 7700;
 const WALKING_MET = 3.3;
+const WALKING_INTENSITY_MET = {
+  slow: 2.8,
+  light: 2.8,
+  normal: 3.3,
+  moderate: 3.3,
+  brisk: 4.3,
+  very_brisk: 5.0,
+  vigorous: 5.0,
+};
 const RESTING_MET = 1.0;
 const REST_MET = 1.5;
 const WORKOUT_MET = 5;
@@ -140,6 +149,98 @@ function roundDisplayKcal(n, step = 10) {
   return Math.round((Number(n) || 0) / size) * size;
 }
 
+function walkingStrideM(heightCm, sex) {
+  const heightM = (Number(heightCm) || 0) / 100;
+  if (heightM <= 0) return 0;
+  const id = String(sex || "").toLowerCase();
+  const factor = id === "male" ? 0.415 : id === "female" ? 0.413 : 0.414;
+  return heightM * factor;
+}
+
+function walkingMetFromIntensity(intensity) {
+  const id = String(intensity || "normal").toLowerCase().replace(/\s+/g, "_");
+  return WALKING_INTENSITY_MET[id] || WALKING_INTENSITY_MET.normal;
+}
+
+function calculateWalkingCalories({
+  steps = 0,
+  weightKg,
+  heightCm,
+  sex,
+  durationMinutes,
+  intensity,
+  speedKmh,
+} = {}) {
+  const n = Math.max(0, Number(steps) || 0);
+  const weight = Number(weightKg) || 0;
+  const minutes = Number(durationMinutes) || 0;
+  let strideM = walkingStrideM(heightCm, sex);
+  let strideEstimated = false;
+  if (n > 0 && strideM <= 0) {
+    strideM = 0.762;
+    strideEstimated = true;
+  }
+  const distanceKm = n > 0 && strideM > 0 ? (n * strideM) / 1000 : 0;
+  const speed = Number(speedKmh) || (minutes > 0 && distanceKm > 0 ? distanceKm / (minutes / 60) : 0);
+
+  const base = {
+    steps: n,
+    distanceKm,
+    strideM,
+    weightKg: weight,
+    durationMinutes: minutes,
+    heightCm: Number(heightCm) || 0,
+    sex: sex || "",
+  };
+
+  if (n <= 0 && minutes <= 0) {
+    return { ...base, activeCalories: 0, totalCalories: 0, restingCalories: 0, met: 0, calculationMethod: "FALLBACK" };
+  }
+
+  if (minutes > 0 && weight > 0) {
+    const met = speed > 0 ? walkingMetFromSpeed(speed) : walkingMetFromIntensity(intensity);
+    const burn = calculateActiveCalories({ weightKg: weight, durationMinutes: minutes, met });
+    return {
+      ...base,
+      met,
+      totalCalories: burn.totalKcal,
+      restingCalories: burn.restingKcal,
+      activeCalories: burn.activeKcal,
+      calculationMethod: "MET",
+    };
+  }
+
+  if (n > 0 && weight > 0 && distanceKm > 0) {
+    const activeCalories = 0.5 * weight * distanceKm;
+    return {
+      ...base,
+      met: WALKING_MET,
+      totalCalories: activeCalories,
+      restingCalories: 0,
+      activeCalories,
+      calculationMethod: strideEstimated || !(Number(heightCm) > 0) ? "FALLBACK" : "DISTANCE_ESTIMATE",
+    };
+  }
+
+  const fbHeight = Number(heightCm) > 0 ? Number(heightCm) : 170;
+  const fbWeight = weight > 0 ? weight : 70;
+  const fbStride = walkingStrideM(fbHeight, sex) || fbHeight / 100 * 0.414;
+  const fbDistance = n > 0 ? (n * fbStride) / 1000 : 0;
+  const activeCalories = n > 0 ? 0.5 * fbWeight * fbDistance : 0;
+  return {
+    ...base,
+    strideM: fbStride,
+    distanceKm: fbDistance,
+    weightKg: fbWeight,
+    heightCm: fbHeight,
+    met: WALKING_MET,
+    totalCalories: activeCalories,
+    restingCalories: 0,
+    activeCalories,
+    calculationMethod: "FALLBACK",
+  };
+}
+
 function fallbackDurationMin(workout) {
   let mins = 0;
   for (const ex of workout?.exercises || []) {
@@ -248,12 +349,27 @@ function estimateWorkoutBurn(workout, weightKg) {
   };
 }
 
+function storedCardioKcal(workout) {
+  let kcal = 0;
+  for (const ex of workout?.exercises || []) {
+    if (ex.kind !== "cardio") continue;
+    for (const set of ex.sets || []) kcal += Number(set.calories) || 0;
+  }
+  return kcal;
+}
+
 function summarizeWorkouts(workouts, weightKg) {
   const list = workouts || [];
   let durationMin = 0;
   let calories = 0;
   let cardioKcal = 0;
   for (const w of list) {
+    if (w.status === "completed" && w.calories != null) {
+      durationMin += Number(w.durationMin) || 0;
+      calories += Number(w.calories) || 0;
+      cardioKcal += Number(w.cardioKcal) || storedCardioKcal(w);
+      continue;
+    }
     const burn = estimateWorkoutBurn(w, weightKg);
     durationMin += burn.durationMin || 0;
     calories += burn.activeKcal;
@@ -301,9 +417,8 @@ function energyBalance({
 } = {}) {
   const methodId = method === "activity" ? "activity" : "tdee";
   const food = Number(foodCalories) || 0;
-  const walkGross = Number(stepKcal) || 0;
+  const walkActive = Math.max(0, Number(stepKcal) || 0);
   const workoutActive = Math.max(0, Number(exerciseKcal) || 0);
-  const walkActive = netActiveKcal(walkGross, WALKING_MET);
   const baselineKcal = sedentaryExpenditure(bmr);
   const activityLabel = ACTIVITY_FACTORS[activityLevel]?.label || "Lightly active";
   const activityFactor = ACTIVITY_FACTORS[activityLevel]?.factor || 1.375;
@@ -329,7 +444,7 @@ function energyBalance({
     activityLabel,
     activityFactor,
     foodCalories: round(food),
-    stepKcal: round(walkGross),
+    stepKcal: round(walkActive),
     exerciseKcal: round(workoutActive),
     cardioKcal: round(cardioKcal),
     walkActiveKcal: walkActive,
@@ -707,6 +822,8 @@ module.exports = {
   sumNutrition,
   roundNutrition,
   calculateActiveCalories,
+  calculateWalkingCalories,
+  walkingStrideM,
   estimateWorkoutBurn,
   resolveWorkoutDuration,
   normalizeIntensity,

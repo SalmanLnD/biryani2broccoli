@@ -178,6 +178,11 @@ const StepLogSchema = new mongoose.Schema({
   date: String,
   steps: { type: Number, default: 0 },
   calories: { type: Number, default: 0 },
+  distanceKm: Number,
+  calculationMethod: String,
+  weightKgUsed: Number,
+  durationMinutes: Number,
+  intensity: String,
 });
 StepLogSchema.index({ user: 1, date: 1 }, { unique: true });
 

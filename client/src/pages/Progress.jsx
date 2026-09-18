@@ -335,8 +335,8 @@ export function DailySummary() {
       <div className="card">
         <Explainer>
           <h3>Activity stats <Tip text={TIPS.activity} /></h3>
-          <p>Steps: {formatNum(day.steps?.steps || 0)}</p>
-          <p>Walking calories: {formatNum(day.stepKcal)} kcal</p>
+          <p>Walking: {formatNum(day.steps?.steps || 0)} steps</p>
+          <p>{formatActiveKcal(day.energy?.walkActiveKcal || day.stepKcal)} active kcal <Tip text={TIPS.walkingCalories} /></p>
           <p>Active calories: {formatActiveKcal(day.exerciseKcal)} active kcal <Tip text={TIPS.activeCalories} /></p>
           <p>Estimated activity total: {formatActiveKcal(day.activeKcal)} active kcal</p>
         </Explainer>

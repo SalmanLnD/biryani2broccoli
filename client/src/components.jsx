@@ -198,8 +198,8 @@ function energyFrom(day) {
     methodNote: TIPS.activity,
     bmr: day?.bmr || 0,
     baselineKcal: 0,
-    walkActiveKcal: 0,
-    workoutActiveKcal: 0,
+    walkActiveKcal: day?.stepKcal || 0,
+    workoutActiveKcal: day?.exerciseKcal || 0,
     stepKcal: day?.stepKcal || 0,
     exerciseKcal: day?.exerciseKcal || 0,
     cardioKcal: 0,
@@ -261,8 +261,14 @@ export function ActivityCard({ day }) {
         </div>
         <p className="tiny" style={{ marginBottom: 10 }}>Activity stats — not added to TDEE</p>
         <div className="kv-list">
-          <div className="kv"><span>Steps</span><b>{formatNum(steps)}</b></div>
-          <div className="kv"><span>Walking calories</span><b>{formatNum(energy.stepKcal)} kcal</b></div>
+          <div className="kv">
+            <span>Walking <Tip text={TIPS.walkingCalories} /></span>
+            <b>{formatNum(steps)} steps</b>
+          </div>
+          <div className="kv">
+            <span>Estimated burn</span>
+            <b>{formatActiveKcal(energy.walkActiveKcal || energy.stepKcal)} active kcal</b>
+          </div>
           <div className="kv"><span>Workout</span><b>{completed ? "Completed" : "Not logged"}</b></div>
           <div className="kv"><span>Workout duration</span><b>{formatNum(workout.durationMin)} min</b></div>
           <div className="kv">

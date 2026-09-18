@@ -35,6 +35,7 @@ const {
   resolveWorkoutDuration,
   normalizeIntensity,
   roundDisplayKcal,
+  calculateWalkingCalories,
 } = require("./calc");
 
 const MEAL_SLOTS = ["breakfast", "morning_snack", "lunch", "evening_snack", "dinner", "other"];
@@ -54,12 +55,6 @@ function publicUser(user) {
     email: user.email,
     profile: user.profile,
   };
-}
-
-function stepCalories(steps, weightKg) {
-  const n = Math.max(0, Number(steps) || 0);
-  const w = Number(weightKg) || 70;
-  return round(n * 0.04 * (w / 70));
 }
 
 function compactName(s) {
@@ -119,14 +114,32 @@ async function applyWorkoutStats(workout, user, { complete = false, durationMin,
   return { ...stats, burn };
 }
 
+function storedCardioKcal(workout) {
+  let kcal = 0;
+  for (const ex of workout?.exercises || []) {
+    if (ex.kind !== "cardio") continue;
+    for (const set of ex.sets || []) kcal += Number(set.calories) || 0;
+  }
+  return kcal;
+}
+
 function decorateWorkout(workout, weightKg) {
   const obj = typeof workout.toObject === "function" ? workout.toObject() : { ...workout };
+  obj.intensity = obj.intensity || "moderate";
+  if (obj.status === "completed" && obj.calories != null) {
+    obj.calories = round(obj.calories);
+    obj.caloriesDisplay = roundDisplayKcal(obj.calories);
+    obj.durationMin = obj.durationMin || 0;
+    obj.cardioKcal = round(obj.cardioKcal || storedCardioKcal(obj));
+    obj.calorieNote = obj.calorieNote || "Stored active calories from when this session was logged.";
+    return obj;
+  }
   const burn = estimateWorkoutBurn(obj, weightKg);
   obj.calories = round(burn.activeKcal);
   obj.caloriesDisplay = roundDisplayKcal(burn.activeKcal);
   obj.durationMin = obj.durationMin || burn.durationMin || 0;
   obj.durationEstimated = burn.estimated;
-  obj.intensity = obj.intensity || "moderate";
+  obj.cardioKcal = round(burn.cardioActiveKcal || 0);
   obj.calorieNote = burn.note;
   return obj;
 }
@@ -766,10 +779,32 @@ function createRouter() {
         return res.status(400).json({ error: "Choose a valid day." });
       }
       const steps = Math.max(0, Math.min(100000, Math.round(Number(req.body.steps) || 0)));
-      const calories = stepCalories(steps, req.user.profile?.currentWeightKg);
+      const p = req.user.profile || {};
+      const walk = calculateWalkingCalories({
+        steps,
+        weightKg: p.currentWeightKg,
+        heightCm: p.heightCm,
+        sex: p.sex,
+        durationMinutes: req.body.durationMinutes,
+        intensity: req.body.intensity,
+        speedKmh: req.body.speedKmh,
+      });
+      const calories = round(walk.activeCalories);
       const log = await StepLog.findOneAndUpdate(
         { user: req.user._id, date },
-        { $set: { user: req.user._id, date, steps, calories } },
+        {
+          $set: {
+            user: req.user._id,
+            date,
+            steps,
+            calories,
+            distanceKm: round(walk.distanceKm, 3),
+            calculationMethod: walk.calculationMethod,
+            weightKgUsed: walk.weightKg,
+            durationMinutes: walk.durationMinutes || undefined,
+            intensity: req.body.intensity || undefined,
+          },
+        },
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
       const day = await dayPayload(req.user, date);

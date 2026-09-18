@@ -47,6 +47,7 @@ export const TIPS = {
   doubleCount: "Adding walking or workout calories on top of TDEE would count typical activity twice, because TDEE already includes your activity level.",
   method: "TDEE-based calculation is simpler and helps prevent double-counting activity when your activity level is already included in TDEE.",
   activeCalories: "Estimated active calories based on your body weight, workout duration and exercise intensity. Actual calorie burn varies by person.",
+  walkingCalories: "Estimated active calories from walking based on your steps, body weight, height and walking intensity. Actual calorie burn varies by pace and individual.",
   goal: "These numbers are targets from your current weight, goal weight, and date. They are not guaranteed outcomes.",
 };
 
@@ -98,6 +99,60 @@ export function formatNum(n, d = 0) {
 export function formatActiveKcal(n, step = 10) {
   const rounded = Math.round((Number(n) || 0) / step) * step;
   return `~${formatNum(rounded)}`;
+}
+
+export function calculateWalkingCalories({
+  steps = 0,
+  weightKg,
+  heightCm,
+  sex,
+  durationMinutes,
+  intensity,
+  speedKmh,
+} = {}) {
+  const n = Math.max(0, Number(steps) || 0);
+  const weight = Number(weightKg) || 0;
+  const minutes = Number(durationMinutes) || 0;
+  const heightM = (Number(heightCm) || 0) / 100;
+  const sexId = String(sex || "").toLowerCase();
+  const factor = sexId === "male" ? 0.415 : sexId === "female" ? 0.413 : 0.414;
+  let strideM = heightM > 0 ? heightM * factor : 0;
+  let strideEstimated = false;
+  if (n > 0 && strideM <= 0) {
+    strideM = 0.762;
+    strideEstimated = true;
+  }
+  const distanceKm = n > 0 && strideM > 0 ? (n * strideM) / 1000 : 0;
+  const mets = { slow: 2.8, light: 2.8, normal: 3.3, moderate: 3.3, brisk: 4.3, very_brisk: 5.0, vigorous: 5.0 };
+  const speed = Number(speedKmh) || (minutes > 0 && distanceKm > 0 ? distanceKm / (minutes / 60) : 0);
+
+  if (minutes > 0 && weight > 0) {
+    let met = mets[String(intensity || "normal").toLowerCase().replace(/\s+/g, "_")] || 3.3;
+    if (speed > 0) {
+      if (speed < 4) met = 2.8;
+      else if (speed < 5) met = 3.3;
+      else if (speed < 6.4) met = 4.3;
+      else met = 5.0;
+    }
+    const total = ((met * 3.5 * weight) / 200) * minutes;
+    const resting = ((1 * 3.5 * weight) / 200) * minutes;
+    return { steps: n, distanceKm, activeCalories: Math.max(0, total - resting), calculationMethod: "MET" };
+  }
+
+  if (n > 0 && weight > 0 && distanceKm > 0 && Number(heightCm) > 0) {
+    return { steps: n, distanceKm, activeCalories: 0.5 * weight * distanceKm, calculationMethod: "DISTANCE_ESTIMATE" };
+  }
+
+  const fbHeight = Number(heightCm) > 0 ? Number(heightCm) : 170;
+  const fbWeight = weight > 0 ? weight : 70;
+  const fbStride = (fbHeight / 100) * factor || 0.7038;
+  const fbDistance = n > 0 ? (n * fbStride) / 1000 : 0;
+  return {
+    steps: n,
+    distanceKm: fbDistance,
+    activeCalories: n > 0 ? 0.5 * fbWeight * fbDistance : 0,
+    calculationMethod: strideEstimated || !(Number(heightCm) > 0) || !(weight > 0) ? "FALLBACK" : "DISTANCE_ESTIMATE",
+  };
 }
 
 export function formatSetScheme(sets = [], kind = "strength", equipmentUsed = "") {

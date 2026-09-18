@@ -2,14 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useApp } from "../AppContext";
-import { Icon, Shell } from "../components";
+import { Icon, Shell, Tip } from "../components";
 import { ExercisePoses } from "../ExercisePoses";
-import { EQUIPMENT, formatActiveKcal, formatNum, formatSetScheme, MUSCLES, TIPS } from "../lib";
-
-function walkKcal(steps, weightKg) {
-  const w = Number(weightKg) || 70;
-  return Math.round(Math.max(0, Number(steps) || 0) * 0.04 * (w / 70));
-}
+import { calculateWalkingCalories, EQUIPMENT, formatActiveKcal, formatNum, formatSetScheme, MUSCLES, TIPS } from "../lib";
 
 export default function WorkoutHome() {
   const { date, day, user, setDay } = useApp();
@@ -19,6 +14,8 @@ export default function WorkoutHome() {
   const [muscle, setMuscle] = useState("all");
   const [exercises, setExercises] = useState([]);
   const [steps, setSteps] = useState(day?.steps?.steps || 0);
+  const [walkMinutes, setWalkMinutes] = useState(day?.steps?.durationMinutes || "");
+  const [walkIntensity, setWalkIntensity] = useState(day?.steps?.intensity || "normal");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState("");
   const [stepError, setStepError] = useState("");
@@ -35,7 +32,11 @@ export default function WorkoutHome() {
     }, 150);
     return () => clearTimeout(t);
   }, [q, muscle]);
-  useEffect(() => setSteps(day?.steps?.steps || 0), [day]);
+  useEffect(() => {
+    setSteps(day?.steps?.steps || 0);
+    setWalkMinutes(day?.steps?.durationMinutes || "");
+    setWalkIntensity(day?.steps?.intensity || "normal");
+  }, [day]);
 
   async function start(title) {
     const data = await api.createWorkout({ date, title });
@@ -49,10 +50,15 @@ export default function WorkoutHome() {
     setStepError("");
     try {
       const count = Math.max(0, Math.round(Number(steps) || 0));
-      const data = await api.setSteps(date, count);
+      const data = await api.setSteps(date, {
+        steps: count,
+        durationMinutes: walkMinutes === "" ? undefined : Number(walkMinutes),
+        intensity: walkIntensity,
+      });
       if (data.day) setDay(data.day);
       setSteps(data.steps?.steps ?? count);
-      setSaved(`Saved ${Number(data.steps?.steps || count).toLocaleString()} steps. About ${formatNum(data.steps?.calories || 0)} kcal walking estimated — shown as activity, not added to the TDEE deficit.`);
+      const kcal = data.steps?.calories ?? 0;
+      setSaved(`Saved ${Number(data.steps?.steps || count).toLocaleString()} steps. ${formatActiveKcal(kcal)} active kcal from walking — shown as activity, not added to the TDEE deficit.`);
     } catch (err) {
       setStepError(err.message || "Could not save steps.");
     } finally {
@@ -61,6 +67,15 @@ export default function WorkoutHome() {
   }
 
   const open = workouts.find((w) => w.status === "in_progress");
+  const p = user?.profile || {};
+  const walkPreview = calculateWalkingCalories({
+    steps,
+    weightKg: p.currentWeightKg,
+    heightCm: p.heightCm,
+    sex: p.sex,
+    durationMinutes: walkMinutes === "" ? undefined : Number(walkMinutes),
+    intensity: walkIntensity,
+  });
 
   return (
     <Shell>
@@ -86,8 +101,8 @@ export default function WorkoutHome() {
       </header>
 
       <form className="card" onSubmit={saveSteps}>
-        <h3>Steps</h3>
-        <p className="tiny">Walking calories are estimated activity stats. They stay visible here and on the dashboard, and are not added on top of TDEE in the recommended calculation.</p>
+        <h3>Walking <Tip text={TIPS.walkingCalories} /></h3>
+        <p className="tiny">Active calories from walking are estimated from your steps, current weight and height. They are not added on top of TDEE in the recommended calculation.</p>
         <div className="qty">
           <button type="button" onClick={() => setSteps(Math.max(0, Number(steps) - 500))}>−</button>
           <input
@@ -101,7 +116,32 @@ export default function WorkoutHome() {
           />
           <button type="button" onClick={() => setSteps(Number(steps) + 500)}>+</button>
         </div>
-        <p className="tiny">~{formatNum(walkKcal(steps, user?.profile?.currentWeightKg))} kcal from these steps</p>
+        <div className="grid-2" style={{ marginTop: 10 }}>
+          <div className="field">
+            <label>Duration (min, optional)</label>
+            <input
+              type="number"
+              min="1"
+              max="600"
+              value={walkMinutes}
+              onChange={(e) => setWalkMinutes(e.target.value)}
+              placeholder="If known"
+            />
+          </div>
+          <div className="field">
+            <label>Pace</label>
+            <select value={walkIntensity} onChange={(e) => setWalkIntensity(e.target.value)}>
+              <option value="slow">Slow</option>
+              <option value="normal">Normal</option>
+              <option value="brisk">Brisk</option>
+              <option value="very_brisk">Very brisk</option>
+            </select>
+          </div>
+        </div>
+        <p className="tiny">
+          {formatNum(Number(steps) || 0)} steps · {formatActiveKcal(walkPreview.activeCalories)} active kcal
+          {walkPreview.distanceKm ? ` · ~${walkPreview.distanceKm.toFixed(2)} km` : ""}
+        </p>
         {stepError && <p className="error">{stepError}</p>}
         {saved && <p className="note">{saved}</p>}
         <button className="btn block" type="submit" disabled={busy}>{busy ? "Saving…" : "Save steps"}</button>
