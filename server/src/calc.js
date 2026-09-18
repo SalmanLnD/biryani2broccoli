@@ -9,7 +9,11 @@ const ACTIVITY_FACTORS = {
 const MIN_CALORIES = { female: 1200, male: 1500, other: 1300 };
 const KCAL_PER_KG = 7700;
 const WALKING_MET = 3.3;
+const RESTING_MET = 1.0;
+const REST_MET = 1.5;
 const WORKOUT_MET = 5;
+const STRENGTH_MET = { light: 3.5, moderate: 5.0, vigorous: 6.0 };
+const CARDIO_INTENSITY_MET = { light: 4.0, moderate: 6.8, vigorous: 9.0 };
 
 function round(n, d = 0) {
   const p = 10 ** d;
@@ -44,19 +48,216 @@ function netActiveKcal(grossKcal, met = WORKOUT_MET) {
   return round(Math.max(0, gross * ((m - 1) / m)));
 }
 
-function summarizeWorkouts(workouts) {
+function normalizeIntensity(value) {
+  const id = String(value || "").toLowerCase();
+  if (id === "light" || id === "vigorous") return id;
+  return "moderate";
+}
+
+function strengthMet(intensity) {
+  return STRENGTH_MET[normalizeIntensity(intensity)] || STRENGTH_MET.moderate;
+}
+
+function walkingMetFromSpeed(kmh) {
+  const s = Number(kmh) || 0;
+  if (s <= 0) return 3.3;
+  if (s < 4) return 2.8;
+  if (s < 5) return 3.3;
+  if (s < 5.6) return 3.8;
+  if (s < 6.4) return 4.3;
+  if (s < 7.2) return 5.0;
+  return 6.3;
+}
+
+function runningMetFromSpeed(kmh) {
+  const s = Number(kmh) || 0;
+  if (s < 8) return walkingMetFromSpeed(s);
+  if (s < 9.7) return 8.3;
+  if (s < 11.3) return 9.8;
+  if (s < 12.9) return 11.0;
+  if (s < 14.5) return 11.8;
+  if (s < 16.1) return 12.8;
+  return 14.5;
+}
+
+function cyclingMetFromSpeed(kmh) {
+  const s = Number(kmh) || 0;
+  if (s <= 0) return 6.8;
+  if (s < 16) return 4.0;
+  if (s < 19) return 6.8;
+  if (s < 22) return 8.0;
+  if (s < 26) return 10.0;
+  return 12.0;
+}
+
+function cardioMetFor({ set, name, intensity } = {}) {
+  const speed = Number(set?.speedKmh) || 0;
+  const n = String(name || "").toLowerCase();
+  const level = normalizeIntensity(intensity);
+  if (speed > 0) {
+    if (/cycl|bike|spin/.test(n)) return cyclingMetFromSpeed(speed);
+    if (/run|jog/.test(n) || (n.includes("treadmill") && speed >= 8)) return runningMetFromSpeed(speed);
+    if (/walk/.test(n) || speed < 8) return walkingMetFromSpeed(speed);
+    return runningMetFromSpeed(speed);
+  }
+  if (/walk/.test(n)) return ({ light: 2.8, moderate: 3.5, vigorous: 5.0 })[level];
+  if (/run|jog/.test(n)) return ({ light: 8.0, moderate: 9.8, vigorous: 11.5 })[level];
+  if (/cycl|bike|spin/.test(n)) return ({ light: 4.0, moderate: 6.8, vigorous: 10.0 })[level];
+  return CARDIO_INTENSITY_MET[level] || CARDIO_INTENSITY_MET.moderate;
+}
+
+function calculateActiveCalories({ weightKg, durationMinutes, met } = {}) {
+  const weight = Number(weightKg) || 0;
+  const minutes = Number(durationMinutes) || 0;
+  const m = Number(met) || 0;
+  if (weight <= 0 || minutes <= 0 || m <= 0) {
+    return {
+      valid: false,
+      weightKg: weight,
+      durationMinutes: minutes,
+      met: m,
+      totalKcal: 0,
+      restingKcal: 0,
+      activeKcal: 0,
+    };
+  }
+  const totalKcal = ((m * 3.5 * weight) / 200) * minutes;
+  const restingKcal = ((RESTING_MET * 3.5 * weight) / 200) * minutes;
+  const activeKcal = Math.max(0, totalKcal - restingKcal);
+  return {
+    valid: true,
+    weightKg: weight,
+    durationMinutes: minutes,
+    met: m,
+    totalKcal,
+    restingKcal,
+    activeKcal,
+  };
+}
+
+function roundDisplayKcal(n, step = 10) {
+  const size = Number(step) > 0 ? Number(step) : 10;
+  return Math.round((Number(n) || 0) / size) * size;
+}
+
+function fallbackDurationMin(workout) {
+  let mins = 0;
+  for (const ex of workout?.exercises || []) {
+    if (ex.kind === "cardio") {
+      mins += (ex.sets || []).reduce((s, set) => s + (Number(set.durationMin) || 0), 0);
+    } else {
+      mins += (ex.sets || []).length * 3;
+    }
+  }
+  return Math.max(0, mins);
+}
+
+function resolveWorkoutDuration(workout, { complete = false, enteredDuration } = {}) {
+  const entered = Number(enteredDuration);
+  if (entered > 0) return { durationMin: Math.round(entered), source: "entered", estimated: false };
+  const stored = Number(workout?.durationMin);
+  if (stored > 0) {
+    return {
+      durationMin: Math.round(stored),
+      source: workout.durationSource || "entered",
+      estimated: Boolean(workout.durationEstimated),
+    };
+  }
+  if (workout?.startedAt) {
+    const start = new Date(workout.startedAt);
+    const end = workout.endedAt
+      ? new Date(workout.endedAt)
+      : workout.status === "completed"
+        ? null
+        : new Date();
+    if (end) {
+      const elapsed = Math.round((end - start) / 60000);
+      if (elapsed >= 1 && elapsed <= 300) {
+        return { durationMin: elapsed, source: "elapsed", estimated: false };
+      }
+    }
+  }
+  const fallback = fallbackDurationMin(workout);
+  if (fallback > 0) return { durationMin: fallback, source: "estimated", estimated: true };
+  return { durationMin: 0, source: "missing", estimated: true };
+}
+
+function estimateWorkoutBurn(workout, weightKg) {
+  const intensity = normalizeIntensity(workout?.intensity);
+  const durationInfo = resolveWorkoutDuration(workout, { complete: workout?.status === "completed" });
+  const sessionMin = durationInfo.durationMin;
+  let cardioMinutes = 0;
+  let cardioActiveKcal = 0;
+  let cardioTotalKcal = 0;
+  let cardioRestingKcal = 0;
+  for (const ex of workout?.exercises || []) {
+    if (ex.kind !== "cardio") continue;
+    for (const set of ex.sets || []) {
+      const mins = Number(set.durationMin) || 0;
+      if (mins <= 0) continue;
+      const met = cardioMetFor({ set, name: ex.name, intensity });
+      const burn = calculateActiveCalories({ weightKg, durationMinutes: mins, met });
+      cardioMinutes += mins;
+      cardioActiveKcal += burn.activeKcal;
+      cardioTotalKcal += burn.totalKcal;
+      cardioRestingKcal += burn.restingKcal;
+      set.calories = round(burn.activeKcal);
+    }
+  }
+  const hasStrength = (workout?.exercises || []).some((ex) => ex.kind !== "cardio");
+  const remaining = Math.max(0, sessionMin - cardioMinutes);
+  let otherActive = 0;
+  let otherTotal = 0;
+  let otherResting = 0;
+  let otherMet = strengthMet(intensity);
+  if (hasStrength) {
+    const strengthMin = sessionMin > 0 ? remaining : 0;
+    const burn = calculateActiveCalories({ weightKg, durationMinutes: strengthMin, met: otherMet });
+    otherActive = burn.activeKcal;
+    otherTotal = burn.totalKcal;
+    otherResting = burn.restingKcal;
+  } else if (remaining > 0) {
+    otherMet = REST_MET;
+    const burn = calculateActiveCalories({ weightKg, durationMinutes: remaining, met: REST_MET });
+    otherActive = burn.activeKcal;
+    otherTotal = burn.totalKcal;
+    otherResting = burn.restingKcal;
+  }
+  const durationMin = sessionMin || cardioMinutes;
+  const estimated = durationInfo.estimated || durationInfo.source === "missing";
+  let note = "Estimated active calories based on body weight, workout duration and exercise intensity. Actual calorie burn varies by person.";
+  if (durationInfo.source === "missing" || durationMin <= 0) {
+    note = "Enter workout duration to estimate active calories. Without duration, a precise burn is not shown.";
+  } else if (durationInfo.estimated) {
+    note = "Duration was estimated from logged sets because start/end time was not available. Active calories are a rough estimate.";
+  } else if (hasStrength) {
+    note = "Rest and lifting time were not tracked separately, so the selected intensity was applied to the session duration. This is an estimate.";
+  }
+  return {
+    intensity,
+    durationMin,
+    durationSource: durationInfo.source,
+    estimated,
+    cardioMinutes,
+    cardioActiveKcal,
+    met: hasStrength ? otherMet : (cardioMinutes ? null : otherMet),
+    totalKcal: cardioTotalKcal + otherTotal,
+    restingKcal: cardioRestingKcal + otherResting,
+    activeKcal: cardioActiveKcal + otherActive,
+    note,
+  };
+}
+
+function summarizeWorkouts(workouts, weightKg) {
   const list = workouts || [];
   let durationMin = 0;
   let calories = 0;
   let cardioKcal = 0;
   for (const w of list) {
-    durationMin += Number(w.durationMin) || 0;
-    calories += Number(w.calories) || 0;
-    for (const ex of w.exercises || []) {
-      if (ex.kind === "cardio") {
-        cardioKcal += (ex.sets || []).reduce((s, set) => s + (Number(set.calories) || 0), 0);
-      }
-    }
+    const burn = estimateWorkoutBurn(w, weightKg);
+    durationMin += burn.durationMin || 0;
+    calories += burn.activeKcal;
+    cardioKcal += burn.cardioActiveKcal || 0;
   }
   return {
     count: list.length,
@@ -101,9 +302,8 @@ function energyBalance({
   const methodId = method === "activity" ? "activity" : "tdee";
   const food = Number(foodCalories) || 0;
   const walkGross = Number(stepKcal) || 0;
-  const workoutGross = Number(exerciseKcal) || 0;
+  const workoutActive = Math.max(0, Number(exerciseKcal) || 0);
   const walkActive = netActiveKcal(walkGross, WALKING_MET);
-  const workoutActive = netActiveKcal(workoutGross, WORKOUT_MET);
   const baselineKcal = sedentaryExpenditure(bmr);
   const activityLabel = ACTIVITY_FACTORS[activityLevel]?.label || "Lightly active";
   const activityFactor = ACTIVITY_FACTORS[activityLevel]?.factor || 1.375;
@@ -114,7 +314,7 @@ function energyBalance({
   if (methodId === "activity") {
     expenditure = round(baselineKcal + walkActive + workoutActive);
     estimatedDeficit = round(expenditure - food);
-    methodNote = "Activity-based mode uses sedentary baseline plus estimated active calories. Walking and workout totals shown for reference are converted to active calories so resting burn is not counted twice.";
+    methodNote = "Activity-based mode uses sedentary baseline plus estimated active calories from walking and workouts. Resting burn is not added again.";
   } else {
     expenditure = round(tdee);
     estimatedDeficit = round(expenditure - food);
@@ -130,7 +330,7 @@ function energyBalance({
     activityFactor,
     foodCalories: round(food),
     stepKcal: round(walkGross),
-    exerciseKcal: round(workoutGross),
+    exerciseKcal: round(workoutActive),
     cardioKcal: round(cardioKcal),
     walkActiveKcal: walkActive,
     workoutActiveKcal: workoutActive,
@@ -397,9 +597,13 @@ function roundNutrition(n) {
   };
 }
 
-function estimateExerciseKcal({ met, durationMin, weightKg, caloriesOverride }) {
-  if (caloriesOverride) return round(caloriesOverride);
-  return round((met || 4) * (weightKg || 70) * ((durationMin || 0) / 60));
+function estimateExerciseKcal({ met, durationMin, weightKg }) {
+  const result = calculateActiveCalories({
+    weightKg,
+    durationMinutes: durationMin,
+    met: met || WORKOUT_MET,
+  });
+  return round(result.activeKcal);
 }
 
 function setVolume(set) {
@@ -502,6 +706,12 @@ module.exports = {
   scaleNutrition,
   sumNutrition,
   roundNutrition,
+  calculateActiveCalories,
+  estimateWorkoutBurn,
+  resolveWorkoutDuration,
+  normalizeIntensity,
+  strengthMet,
+  roundDisplayKcal,
   estimateExerciseKcal,
   sessionStats,
   setVolume,

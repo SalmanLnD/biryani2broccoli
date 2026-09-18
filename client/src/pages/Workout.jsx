@@ -4,7 +4,7 @@ import { api } from "../api";
 import { useApp } from "../AppContext";
 import { Icon, Shell } from "../components";
 import { ExercisePoses } from "../ExercisePoses";
-import { EQUIPMENT, formatNum, MUSCLES } from "../lib";
+import { EQUIPMENT, formatActiveKcal, formatNum, formatSetScheme, MUSCLES, TIPS } from "../lib";
 
 function walkKcal(steps, weightKg) {
   const w = Number(weightKg) || 70;
@@ -111,9 +111,9 @@ export default function WorkoutHome() {
         <button key={w._id} className="food-row" onClick={() => nav(`/workout/summary/${w._id}`)}>
           <div>
             <b>{w.title}</b>
-            <span className="tiny">{w.durationMin || 0} min · {w.exercises.length} exercises</span>
+            <span className="tiny">{w.durationMin || 0} min · {w.exercises.length} exercises · {formatActiveKcal(w.calories)} active kcal</span>
           </div>
-          <b>{formatNum(w.calories)} kcal</b>
+          <b>{formatActiveKcal(w.calories)} active kcal</b>
         </button>
       ))}
 
@@ -197,6 +197,8 @@ export function WorkoutSession() {
   const nav = useNavigate();
   const [workout, setWorkout] = useState(null);
   const [title, setTitle] = useState("");
+  const [durationMin, setDurationMin] = useState("");
+  const [intensity, setIntensity] = useState("moderate");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState("");
   const [saveError, setSaveError] = useState("");
@@ -206,6 +208,8 @@ export function WorkoutSession() {
     const w = all.workouts.find((x) => x._id === id);
     setWorkout(w);
     setTitle(w?.title || "");
+    setDurationMin(w?.durationMin || "");
+    setIntensity(w?.intensity || "moderate");
   }
   useEffect(() => { load(); }, [id]);
 
@@ -240,6 +244,8 @@ export function WorkoutSession() {
         title,
         exercises: workout.exercises,
         notes: workout.notes,
+        intensity,
+        durationMin: durationMin === "" ? undefined : Number(durationMin),
         ...extra,
       });
       setWorkout(data.workout);
@@ -273,6 +279,28 @@ export function WorkoutSession() {
         <button className="btn compact" type="button" disabled={busy} onClick={finish}>Finish</button>
       </header>
       <div className="field"><label>Workout name</label><input value={title} onChange={(e) => setTitle(e.target.value)} /></div>
+      <div className="grid-2">
+        <div className="field">
+          <label>Duration (min)</label>
+          <input
+            type="number"
+            min="1"
+            max="300"
+            value={durationMin}
+            onChange={(e) => setDurationMin(e.target.value)}
+            placeholder="e.g. 60"
+          />
+        </div>
+        <div className="field">
+          <label>Intensity</label>
+          <select value={intensity} onChange={(e) => setIntensity(e.target.value)}>
+            <option value="light">Light</option>
+            <option value="moderate">Moderate</option>
+            <option value="vigorous">Vigorous</option>
+          </select>
+        </div>
+      </div>
+      <p className="tiny">Active calories use your current body weight, this duration, and intensity. Leave duration blank to use time since you started. Lifted weight is not used.</p>
       {workout.exercises.map((block, ei) => (
         <div className="card" key={block._id || ei}>
           <div className="meal-head">
@@ -369,7 +397,7 @@ export function WorkoutSummary() {
         <div><b>{sets}</b><span>Sets</span></div>
         <div><b>{formatNum(reps)}</b><span>Reps</span></div>
         <div><b>{formatNum(volume)} kg</b><span>Volume</span></div>
-        <div><b>~{formatNum(workout.calories)}</b><span>kcal estimate</span></div>
+        <div><b>{formatActiveKcal(workout.calories)}</b><span>active kcal</span></div>
       </div>
       {workout.personalRecords?.length > 0 && (
         <div className="card">
@@ -380,14 +408,23 @@ export function WorkoutSummary() {
       {prev && (
         <div className="card">
           <h3>Compared with previous</h3>
-          <p className="insight">Last session {prev.date}: {prev.durationMin || 0} min, ~{formatNum(prev.calories)} kcal</p>
-          <p className="tiny">Calories burned are estimates from duration, body weight and activity type. They are activity stats, not extra deficit on top of TDEE.</p>
+          <p className="insight">Last session {prev.date}: {prev.durationMin || 0} min, {formatActiveKcal(prev.calories)} active kcal</p>
+          <p className="tiny">Active calories are estimates from your current body weight, workout duration and intensity. They are activity stats, not extra deficit on top of TDEE.</p>
         </div>
       )}
       <div className="card">
-        {workout.exercises.map((e) => (
-          <p key={e._id || e.name} className="insight">{e.name} · {e.sets.length} sets</p>
-        ))}
+        {workout.durationEstimated && (
+          <p className="tiny">Duration was estimated from logged sets because start/end time was not available.</p>
+        )}
+        <p className="tiny">{workout.calorieNote || TIPS.activeCalories}</p>
+        {workout.exercises.map((e) => {
+          const scheme = formatSetScheme(e.sets, e.kind, e.equipmentUsed);
+          return (
+            <p key={e._id || e.name} className="insight">
+              {e.name} · {scheme || `${e.sets.length} sets`}
+            </p>
+          );
+        })}
       </div>
     </Shell>
   );

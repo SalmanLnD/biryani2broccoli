@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useApp } from "../AppContext";
 import { Shell } from "../components";
-import { formatNum, todayKey } from "../lib";
+import { formatActiveKcal, formatNum, formatSetScheme, todayKey } from "../lib";
 
 const TEMPLATE = `workout,exercise,mode,sets,reps,weight,unit,equipment,date,duration_min,distance_km,notes
 Push day,Barbell Bench Press,strength,3,10,60,kg,barbell,${todayKey()},,,
@@ -169,9 +169,17 @@ export default function WorkoutUpload() {
             <div>
               <b>{row.exercise || "Missing exercise"}</b>
               <span className="tiny">
-                {row.workout || "Gym session"} · {row.mode || "strength"} · {row.sets || "3"} sets
-                {row.reps ? ` × ${row.reps}` : ""}
-                {row.weight ? ` @ ${row.weight}${row.unit || "kg"}` : ""}
+                {row.workout || "Gym session"} · {row.mode || "strength"} · {formatSetScheme(
+                  Array.from({ length: Math.max(1, Number(row.sets) || 3) }, () => ({
+                    reps: Number(row.reps) || 0,
+                    weight: Number(row.weight) || 0,
+                    unit: row.unit || "kg",
+                    durationMin: Number(row.duration_min) || 0,
+                    distanceKm: Number(row.distance_km) || 0,
+                  })),
+                  row.mode === "cardio" ? "cardio" : "strength",
+                  row.equipment
+                )}
               </span>
             </div>
             <span className="tiny">{row.date || date}</span>
@@ -186,7 +194,7 @@ export default function WorkoutUpload() {
           Imported {result.imported} workout{result.imported === 1 ? "" : "s"}.
           {result.workouts?.map((w) => (
             <p key={w.id} className="tiny" style={{ marginTop: 6 }}>
-              {w.date} · {w.title} · {w.exercises} exercises · {formatNum(w.calories)} kcal
+              {w.date} · {w.title} · {w.exercises} exercises · {formatActiveKcal(w.calories)} active kcal
               {w.unmatched?.length ? ` · unmatched: ${w.unmatched.join(", ")}` : ""}
             </p>
           ))}
@@ -199,7 +207,7 @@ export default function WorkoutUpload() {
       <button className="btn block lg" type="button" disabled={busy || !!parsed.error || !parsed.rows.length} onClick={importRows}>
         {busy ? "Importing…" : "Import workouts"}
       </button>
-      <p className="est">Calories burned are estimates from duration, body weight and exercise type. Unmatched names are still logged as custom exercises.</p>
+      <p className="est">Active calories are estimates from your body weight, workout duration and intensity. Unmatched names are still logged as custom exercises.</p>
     </Shell>
   );
 }

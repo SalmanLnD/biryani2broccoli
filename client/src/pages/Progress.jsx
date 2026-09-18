@@ -3,7 +3,7 @@ import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Too
 import { api } from "../api";
 import { useApp } from "../AppContext";
 import { DateStrip, ProgressTabs, Shell, WeekSelector, Tip, Explainer } from "../components";
-import { formatDate, formatNum, MEALS, startOfWeek, todayKey, TIPS } from "../lib";
+import { formatActiveKcal, formatDate, formatNum, MEALS, startOfWeek, todayKey, TIPS } from "../lib";
 
 const tooltip = { background: "#fff", border: "1px solid #dce7e2", borderRadius: 8, fontSize: 12 };
 
@@ -220,7 +220,7 @@ export function WeeklyWorkouts() {
               const volume = d.workouts.reduce((s, w) => s + w.exercises.reduce((a, e) => a + e.sets.reduce((x, set) => x + (set.reps || 0) * (set.weight || 0), 0), 0), 0);
               return (
                 <p key={d.date} className="insight">
-                  {formatDate(d.date, { weekday: "short" })} · {d.workouts.length ? "completed" : "not completed"} · {d.workouts[0]?.durationMin || 0} min · {formatNum(d.activeKcal)} kcal · {d.steps.steps || 0} steps · {sets} sets · {formatNum(volume)} kg volume
+                  {formatDate(d.date, { weekday: "short" })} · {d.workouts.length ? "completed" : "not completed"} · {d.workouts[0]?.durationMin || 0} min · {formatActiveKcal(d.energy?.workoutActiveKcal || d.exerciseKcal)} active kcal · {d.steps.steps || 0} steps · {sets} sets · {formatNum(volume)} kg volume
                 </p>
               );
             })}
@@ -337,8 +337,8 @@ export function DailySummary() {
           <h3>Activity stats <Tip text={TIPS.activity} /></h3>
           <p>Steps: {formatNum(day.steps?.steps || 0)}</p>
           <p>Walking calories: {formatNum(day.stepKcal)} kcal</p>
-          <p>Workout calories: {formatNum(day.exerciseKcal)} kcal</p>
-          <p>Estimated activity calories: {formatNum(day.activeKcal)} kcal</p>
+          <p>Active calories: {formatActiveKcal(day.exerciseKcal)} active kcal <Tip text={TIPS.activeCalories} /></p>
+          <p>Estimated activity total: {formatActiveKcal(day.activeKcal)} active kcal</p>
         </Explainer>
       </div>
       <div className="card">

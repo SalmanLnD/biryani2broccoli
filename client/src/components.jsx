@@ -1,6 +1,6 @@
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { createContext, useContext, useState } from "react";
-import { addDays, formatDate, formatNum, startOfWeek, todayKey, TIPS } from "./lib";
+import { addDays, formatActiveKcal, formatDate, formatNum, startOfWeek, todayKey, TIPS } from "./lib";
 import { useApp } from "./AppContext";
 
 const TipCtx = createContext(null);
@@ -265,13 +265,16 @@ export function ActivityCard({ day }) {
           <div className="kv"><span>Walking calories</span><b>{formatNum(energy.stepKcal)} kcal</b></div>
           <div className="kv"><span>Workout</span><b>{completed ? "Completed" : "Not logged"}</b></div>
           <div className="kv"><span>Workout duration</span><b>{formatNum(workout.durationMin)} min</b></div>
-          <div className="kv"><span>Workout calories</span><b>{formatNum(workout.calories || energy.exerciseKcal)} kcal</b></div>
+          <div className="kv">
+            <span>Active calories <Tip text={TIPS.activeCalories} /></span>
+            <b>{formatActiveKcal(workout.calories || energy.exerciseKcal)} active kcal</b>
+          </div>
           {workout.cardioKcal > 0 && (
             <div className="kv"><span>Cardio calories</span><b>{formatNum(workout.cardioKcal)} kcal</b></div>
           )}
         </div>
       </Explainer>
-      <p className="est">These are estimated activity calories, not extra calories to add to your deficit.</p>
+      <p className="est">These are estimated active calories, not extra calories to add to your TDEE deficit.</p>
     </section>
   );
 }

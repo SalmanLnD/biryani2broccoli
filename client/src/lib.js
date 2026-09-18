@@ -43,10 +43,10 @@ export const TIPS = {
   tdee: "TDEE is an estimate of how many calories you typically burn in a day. It is BMR multiplied by your selected activity level.",
   bmr: "BMR is an estimate of calories your body uses at rest. TDEE then adds typical daily activity on top of that.",
   deficit: "Estimated deficit is maintenance calories minus food eaten. A positive number means you ate less than maintenance. It is an estimate, not a guarantee of fat loss.",
-  activity: "Steps, walking calories, and workout calories are tracked for reference. They are not added on top of TDEE in the recommended calculation.",
+  activity: "Steps, walking, and workout active calories are tracked for reference. They are not added on top of TDEE in the recommended calculation.",
   doubleCount: "Adding walking or workout calories on top of TDEE would count typical activity twice, because TDEE already includes your activity level.",
   method: "TDEE-based calculation is simpler and helps prevent double-counting activity when your activity level is already included in TDEE.",
-  activeCalories: "Active calories try to count extra movement only, not the resting burn already included in a workout or walking estimate.",
+  activeCalories: "Estimated active calories based on your body weight, workout duration and exercise intensity. Actual calorie burn varies by person.",
   goal: "These numbers are targets from your current weight, goal weight, and date. They are not guaranteed outcomes.",
 };
 
@@ -93,6 +93,39 @@ export function formatDate(dateKey, opts) {
 
 export function formatNum(n, d = 0) {
   return Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d });
+}
+
+export function formatActiveKcal(n, step = 10) {
+  const rounded = Math.round((Number(n) || 0) / step) * step;
+  return `~${formatNum(rounded)}`;
+}
+
+export function formatSetScheme(sets = [], kind = "strength", equipmentUsed = "") {
+  if (kind === "cardio") {
+    const mins = sets.reduce((s, x) => s + (Number(x.durationMin) || 0), 0);
+    const km = sets.reduce((s, x) => s + (Number(x.distanceKm) || 0), 0);
+    if (mins && km) return `${mins} min · ${km} km`;
+    if (mins) return `${mins} min`;
+    if (km) return `${km} km`;
+    return "";
+  }
+  const groups = [];
+  for (const s of sets) {
+    const weight = Number(s.weight) || 0;
+    const reps = Number(s.reps) || 0;
+    const unit = s.unit || "kg";
+    const last = groups[groups.length - 1];
+    if (last && last.weight === weight && last.reps === reps && last.unit === unit) last.sets += 1;
+    else groups.push({ weight, reps, unit, sets: 1 });
+  }
+  if (!groups.length) return "";
+  const bodyweight = equipmentUsed === "bodyweight";
+  return groups
+    .map((g) => {
+      const load = bodyweight && !g.weight ? "BW" : `${g.weight}${g.unit}`;
+      return `${load} x ${g.reps} x ${g.sets}`;
+    })
+    .join(" · ");
 }
 
 export function scaleFood(food, quantity, unit) {

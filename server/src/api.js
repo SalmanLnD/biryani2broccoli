@@ -15,7 +15,6 @@ const {
   scaleNutrition,
   sumNutrition,
   roundNutrition,
-  estimateExerciseKcal,
   sessionStats,
   generateInsights,
   localDateKey,
@@ -32,6 +31,10 @@ const {
   weighInPrompt,
   weeklyWeightProgress,
   daysBetween,
+  estimateWorkoutBurn,
+  resolveWorkoutDuration,
+  normalizeIntensity,
+  roundDisplayKcal,
 } = require("./calc");
 
 const MEAL_SLOTS = ["breakfast", "morning_snack", "lunch", "evening_snack", "dinner", "other"];
@@ -78,35 +81,21 @@ function matchExercise(name, catalog) {
   );
 }
 
-async function applyWorkoutStats(workout, user, { complete = false, durationMin } = {}) {
+async function applyWorkoutStats(workout, user, { complete = false, durationMin, intensity } = {}) {
   const stats = sessionStats(workout.exercises);
-  let kcal = 0;
   const weightKg = user.profile?.currentWeightKg || 70;
-  for (const block of workout.exercises) {
-    const catalog = block.exercise ? await Exercise.findById(block.exercise) : null;
-    if (block.kind === "cardio") {
-      for (const s of block.sets) {
-        s.calories = estimateExerciseKcal({
-          met: catalog?.met,
-          durationMin: s.durationMin,
-          weightKg,
-          caloriesOverride: s.calories,
-        });
-        kcal += s.calories || 0;
-      }
-    } else {
-      const minutes = Math.max(4, (block.sets?.length || 0) * 3);
-      kcal += estimateExerciseKcal({ met: catalog?.met || 5, durationMin: minutes, weightKg }) / Math.max(1, workout.exercises.length);
-    }
-  }
-  workout.calories = round(kcal);
+  workout.intensity = normalizeIntensity(intensity || workout.intensity);
   if (complete) {
     workout.status = "completed";
     workout.endedAt = workout.endedAt || new Date();
-    if (durationMin) workout.durationMin = durationMin;
-    else if (workout.startedAt) {
-      workout.durationMin = Math.max(1, Math.round((workout.endedAt - workout.startedAt) / 60000));
-    }
+  }
+  const resolved = resolveWorkoutDuration(workout, { complete, enteredDuration: durationMin });
+  workout.durationMin = resolved.durationMin || undefined;
+  workout.durationSource = resolved.source;
+  workout.durationEstimated = resolved.estimated;
+  const burn = estimateWorkoutBurn(workout, weightKg);
+  workout.calories = round(burn.activeKcal);
+  if (complete) {
     const previous = await Workout.find({
       user: user._id,
       status: "completed",
@@ -127,7 +116,19 @@ async function applyWorkoutStats(workout, user, { complete = false, durationMin 
     }
     workout.personalRecords = prs;
   }
-  return stats;
+  return { ...stats, burn };
+}
+
+function decorateWorkout(workout, weightKg) {
+  const obj = typeof workout.toObject === "function" ? workout.toObject() : { ...workout };
+  const burn = estimateWorkoutBurn(obj, weightKg);
+  obj.calories = round(burn.activeKcal);
+  obj.caloriesDisplay = roundDisplayKcal(burn.activeKcal);
+  obj.durationMin = obj.durationMin || burn.durationMin || 0;
+  obj.durationEstimated = burn.estimated;
+  obj.intensity = obj.intensity || "moderate";
+  obj.calorieNote = burn.note;
+  return obj;
 }
 
 async function ensureMeals(userId, date) {
@@ -194,10 +195,11 @@ async function dayPayload(user, date) {
     };
   }
   const consumed = roundNutrition(sumNutrition(meals.flatMap((m) => m.items)));
-  const workout = summarizeWorkouts(workouts);
+  const weightKg = user.profile?.currentWeightKg || 70;
+  const workoutDocs = workouts.map((w) => decorateWorkout(w, weightKg));
+  const workout = summarizeWorkouts(workoutDocs, weightKg);
   const exerciseKcal = workout.calories;
   const stepKcal = steps?.calories || 0;
-  const activeKcal = round(exerciseKcal + stepKcal);
   const targets = {
     calorieTarget: user.profile?.calorieTarget || 0,
     proteinTarget: user.profile?.proteinTarget || 0,
@@ -218,6 +220,7 @@ async function dayPayload(user, date) {
     exerciseKcal,
     cardioKcal: workout.cardioKcal,
   });
+  const activeKcal = round((energy.walkActiveKcal || 0) + (energy.workoutActiveKcal || 0));
   const remaining = round((targets.calorieTarget || 0) - (consumed.calories || 0));
   const insights = generateInsights({
     consumed,
@@ -262,7 +265,7 @@ async function dayPayload(user, date) {
     workout,
     goal,
     percent: targets.calorieTarget ? round((consumed.calories / targets.calorieTarget) * 100) : 0,
-    workouts,
+    workouts: workoutDocs,
     steps: steps || { steps: 0, calories: 0, date },
     weight,
     weighIn,
@@ -579,7 +582,8 @@ function createRouter() {
     const filter = { user: req.user._id };
     if (date) filter.date = date;
     const workouts = await Workout.find(filter).sort({ startedAt: -1 });
-    res.json({ workouts });
+    const weightKg = req.user.profile?.currentWeightKg || 70;
+    res.json({ workouts: workouts.map((w) => decorateWorkout(w, weightKg)) });
   });
 
   r.post("/workouts", auth, async (req, res) => {
@@ -590,6 +594,7 @@ function createRouter() {
       title: req.body.title || "Workout",
       startedAt: new Date(),
       status: "in_progress",
+      intensity: normalizeIntensity(req.body.intensity),
       exercises: [],
     });
     res.json({ workout });
@@ -639,9 +644,12 @@ function createRouter() {
         sets = Array.from({ length: setCount }, () => ({ ...one }));
       }
       const key = `${date}||${title}`;
-      if (!groups.has(key)) groups.set(key, { date, title, notes: String(raw.notes || ""), exercises: [] });
+      if (!groups.has(key)) groups.set(key, { date, title, notes: String(raw.notes || ""), exercises: [], durationMin: 0, intensity: "moderate" });
       const group = groups.get(key);
       if (raw.notes) group.notes = [group.notes, String(raw.notes)].filter(Boolean).join(" ");
+      const rowDuration = Number(raw.duration_min || raw.duration) || 0;
+      if (rowDuration > group.durationMin) group.durationMin = rowDuration;
+      if (raw.intensity) group.intensity = normalizeIntensity(raw.intensity);
       const blockName = catalogEx?.name || exerciseName;
       const existing = group.exercises.find((e) => e.name.toLowerCase() === blockName.toLowerCase() && e.kind === kind);
       const block = {
@@ -663,12 +671,17 @@ function createRouter() {
 
     const created = [];
     for (const group of groups.values()) {
-      let durationMin = 0;
-      for (const block of group.exercises) {
-        if (block.kind === "cardio") durationMin += block.sets.reduce((s, x) => s + (Number(x.durationMin) || 0), 0);
-        else durationMin += (block.sets.length || 0) * 3;
+      let durationMin = Number(group.durationMin) || 0;
+      let durationEstimated = false;
+      if (!durationMin) {
+        durationEstimated = true;
+        for (const block of group.exercises) {
+          if (block.kind === "cardio") durationMin += block.sets.reduce((s, x) => s + (Number(x.durationMin) || 0), 0);
+          else durationMin += (block.sets.length || 0) * 3;
+        }
       }
-      durationMin = Math.max(1, round(durationMin));
+      durationMin = Math.max(durationEstimated ? 0 : 1, round(durationMin));
+      if (!durationMin) durationMin = 1;
       const startedAt = new Date(`${group.date}T08:00:00`);
       const endedAt = new Date(startedAt.getTime() + durationMin * 60000);
       const workout = new Workout({
@@ -679,10 +692,16 @@ function createRouter() {
         startedAt,
         endedAt,
         durationMin,
+        durationEstimated,
+        intensity: normalizeIntensity(group.intensity),
         status: "in_progress",
         exercises: group.exercises.map(({ matched, ...block }) => block),
       });
-      const stats = await applyWorkoutStats(workout, req.user, { complete: true, durationMin });
+      const stats = await applyWorkoutStats(workout, req.user, {
+        complete: true,
+        durationMin,
+        intensity: group.intensity,
+      });
       await workout.save();
       created.push({
         id: workout._id,
@@ -723,14 +742,16 @@ function createRouter() {
     if (req.body.title) workout.title = req.body.title;
     if (req.body.exercises) workout.exercises = req.body.exercises;
     if (req.body.notes !== undefined) workout.notes = req.body.notes;
+    if (req.body.intensity) workout.intensity = normalizeIntensity(req.body.intensity);
 
     const stats = await applyWorkoutStats(workout, req.user, {
       complete: req.body.status === "completed",
       durationMin: req.body.durationMin,
+      intensity: req.body.intensity || workout.intensity,
     });
     if (req.body.status === "completed") workout._stats = stats;
     await workout.save();
-    res.json({ workout, stats });
+    res.json({ workout: decorateWorkout(workout, req.user.profile?.currentWeightKg || 70), stats });
   });
 
   r.delete("/workouts/:id", auth, async (req, res) => {
